@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>websocket_sharp_standard</RootNamespace>
+    <PackageId>websocket-sharp</PackageId>
+    <Authors>websocket-sharp</Authors>
+    <Product>websocket-sharp.dll</Product>
+    <Description>C# implementation of the WebSocket protocol client and server.</Description>
+    <AssemblyVersion>1.0.2.1</AssemblyVersion>
+    <Copyright>sta.blockhead</Copyright>
+    <Company />
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="doc\**" />
+    <EmbeddedResource Remove="doc\**" />
+    <None Remove="doc\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="AssemblyInfo.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="websocket-sharp.snk" />
+  </ItemGroup>
+
+</Project>

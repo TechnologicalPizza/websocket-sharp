@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="3.5" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -12,6 +12,11 @@
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>websocket-sharp.snk</AssemblyOriginatorKeyFile>
+    <FileUpgradeFlags>
+    </FileUpgradeFlags>
+    <UpgradeBackupLocation>
+    </UpgradeBackupLocation>
+    <OldToolsVersion>3.5</OldToolsVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -67,6 +72,7 @@
     <Compile Include="CloseEventArgs.cs" />
     <Compile Include="ByteOrder.cs" />
     <Compile Include="ErrorEventArgs.cs" />
+    <Compile Include="Server\WebSocketServiceHost{TBehavior}.cs" />
     <Compile Include="WebSocket.cs" />
     <Compile Include="Server\WebSocketServer.cs" />
     <Compile Include="Net\AuthenticationSchemes.cs" />
@@ -138,12 +144,7 @@
     <Compile Include="Net\HttpListenerAsyncResult.cs" />
     <Compile Include="Net\HttpRequestHeader.cs" />
     <Compile Include="Net\HttpResponseHeader.cs" />
-    <Compile Include="Server\WebSocketServiceHost`1.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
-  <ItemGroup>
-    <Folder Include="Server\" />
-    <Folder Include="Net\" />
-    <Folder Include="Net\WebSockets\" />
-  </ItemGroup>
+  <ItemGroup />
 </Project>
