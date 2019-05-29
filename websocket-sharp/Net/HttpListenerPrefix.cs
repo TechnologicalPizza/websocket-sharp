@@ -75,55 +75,31 @@ namespace WebSocketSharp.Net
       parse (uriPrefix);
     }
 
-    #endregion
+        #endregion
 
-    #region Public Properties
+        #region Public Properties
 
-    public string Host {
-      get {
-        return _host;
-      }
+        public string Host => _host;
+
+        public bool IsSecure => _secure;
+
+        public HttpListener Listener {
+      get => _listener;
+
+      set => _listener = value;
     }
 
-    public bool IsSecure {
-      get {
-        return _secure;
-      }
-    }
+        public string Original => _original;
 
-    public HttpListener Listener {
-      get {
-        return _listener;
-      }
+        public string Path => _path;
 
-      set {
-        _listener = value;
-      }
-    }
+        public string Port => _port;
 
-    public string Original {
-      get {
-        return _original;
-      }
-    }
+        #endregion
 
-    public string Path {
-      get {
-        return _path;
-      }
-    }
+        #region Private Methods
 
-    public string Port {
-      get {
-        return _port;
-      }
-    }
-
-    #endregion
-
-    #region Private Methods
-
-    private void parse (string uriPrefix)
+        private void parse (string uriPrefix)
     {
       if (uriPrefix.StartsWith ("https"))
         _secure = true;
@@ -145,7 +121,7 @@ namespace WebSocketSharp.Net
       _path = uriPrefix.Substring (root);
 
       _prefix =
-        String.Format ("http{0}://{1}:{2}{3}", _secure ? "s" : "", _host, _port, _path);
+        string.Format ("http{0}://{1}:{2}{3}", _secure ? "s" : "", _host, _port, _path);
     }
 
     #endregion
@@ -185,24 +161,23 @@ namespace WebSocketSharp.Net
         throw new ArgumentException ("No path is specified.", "uriPrefix");
     }
 
-    /// <summary>
-    /// Determines whether this instance and the specified <see cref="Object"/> have the same value.
-    /// </summary>
-    /// <remarks>
-    /// This method will be required to detect duplicates in any collection.
-    /// </remarks>
-    /// <param name="obj">
-    /// An <see cref="Object"/> to compare to this instance.
-    /// </param>
-    /// <returns>
-    /// <c>true</c> if <paramref name="obj"/> is a <see cref="HttpListenerPrefix"/> and
-    /// its value is the same as this instance; otherwise, <c>false</c>.
-    /// </returns>
-    public override bool Equals (Object obj)
+        /// <summary>
+        /// Determines whether this instance and the specified <see cref="object"/> have the same value.
+        /// </summary>
+        /// <remarks>
+        /// This method will be required to detect duplicates in any collection.
+        /// </remarks>
+        /// <param name="obj">
+        /// An <see cref="object"/> to compare to this instance.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> if <paramref name="obj"/> is a <see cref="HttpListenerPrefix"/> and
+        /// its value is the same as this instance; otherwise, <c>false</c>.
+        /// </returns>
+        public override bool Equals (object obj)
     {
-      var pref = obj as HttpListenerPrefix;
-      return pref != null && pref._prefix == _prefix;
-    }
+            return obj is HttpListenerPrefix pref && pref._prefix == _prefix;
+        }
 
     /// <summary>
     /// Gets the hash code for this instance.

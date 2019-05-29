@@ -83,60 +83,44 @@ namespace WebSocketSharp
     {
     }
 
-    #endregion
+        #endregion
 
-    #region Internal Properties
+        #region Internal Properties
 
-    internal PayloadData PayloadData {
-      get {
-        return _payloadData;
-      }
+        internal PayloadData PayloadData => _payloadData;
+
+        #endregion
+
+        #region Public Properties
+
+        /// <summary>
+        /// Gets the status code for the close.
+        /// </summary>
+        /// <value>
+        /// A <see cref="ushort"/> that represents the status code for the close if any.
+        /// </value>
+        public ushort Code => _payloadData.Code;
+
+        /// <summary>
+        /// Gets the reason for the close.
+        /// </summary>
+        /// <value>
+        /// A <see cref="string"/> that represents the reason for the close if any.
+        /// </value>
+        public string Reason => _payloadData.Reason ?? string.Empty;
+
+        /// <summary>
+        /// Gets a value indicating whether the connection has been closed cleanly.
+        /// </summary>
+        /// <value>
+        /// <c>true</c> if the connection has been closed cleanly; otherwise, <c>false</c>.
+        /// </value>
+        public bool WasClean {
+      get => _clean;
+
+      internal set => _clean = value;
     }
 
-    #endregion
-
-    #region Public Properties
-
-    /// <summary>
-    /// Gets the status code for the close.
-    /// </summary>
-    /// <value>
-    /// A <see cref="ushort"/> that represents the status code for the close if any.
-    /// </value>
-    public ushort Code {
-      get {
-        return _payloadData.Code;
-      }
+        #endregion
     }
-
-    /// <summary>
-    /// Gets the reason for the close.
-    /// </summary>
-    /// <value>
-    /// A <see cref="string"/> that represents the reason for the close if any.
-    /// </value>
-    public string Reason {
-      get {
-        return _payloadData.Reason ?? String.Empty;
-      }
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether the connection has been closed cleanly.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if the connection has been closed cleanly; otherwise, <c>false</c>.
-    /// </value>
-    public bool WasClean {
-      get {
-        return _clean;
-      }
-
-      internal set {
-        _clean = value;
-      }
-    }
-
-    #endregion
-  }
 }

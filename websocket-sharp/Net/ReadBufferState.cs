@@ -70,55 +70,35 @@ namespace WebSocketSharp.Net
     #region Public Properties
 
     public HttpStreamAsyncResult AsyncResult {
-      get {
-        return _asyncResult;
-      }
+      get => _asyncResult;
 
-      set {
-        _asyncResult = value;
-      }
+      set => _asyncResult = value;
     }
 
-    public byte[] Buffer {
-      get {
-        return _buffer;
-      }
+        public byte[] Buffer {
+      get => _buffer;
 
-      set {
-        _buffer = value;
-      }
+      set => _buffer = value;
     }
 
-    public int Count {
-      get {
-        return _count;
-      }
+        public int Count {
+      get => _count;
 
-      set {
-        _count = value;
-      }
+      set => _count = value;
     }
 
-    public int InitialCount {
-      get {
-        return _initialCount;
-      }
+        public int InitialCount {
+      get => _initialCount;
 
-      set {
-        _initialCount = value;
-      }
+      set => _initialCount = value;
     }
 
-    public int Offset {
-      get {
-        return _offset;
-      }
+        public int Offset {
+      get => _offset;
 
-      set {
-        _offset = value;
-      }
+      set => _offset = value;
     }
 
-    #endregion
-  }
+        #endregion
+    }
 }

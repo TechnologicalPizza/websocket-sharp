@@ -59,21 +59,17 @@ namespace WebSocketSharp.Server
       _creator = createCreator (creator, initializer);
     }
 
-    #endregion
+        #endregion
 
-    #region Public Properties
+        #region Public Properties
 
-    public override Type BehaviorType {
-      get {
-        return typeof (TBehavior);
-      }
-    }
+        public override Type BehaviorType => typeof(TBehavior);
 
-    #endregion
+        #endregion
 
-    #region Private Methods
+        #region Private Methods
 
-    private Func<TBehavior> createCreator (
+        private Func<TBehavior> createCreator (
       Func<TBehavior> creator, Action<TBehavior> initializer
     )
     {

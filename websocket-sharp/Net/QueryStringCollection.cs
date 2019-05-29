@@ -124,7 +124,7 @@ namespace WebSocketSharp.Net
         var start = i + 1;
         var val = start < len
                   ? urlDecode (component.Substring (start), encoding)
-                  : String.Empty;
+                  : string.Empty;
 
         ret.Add (name, val);
       }

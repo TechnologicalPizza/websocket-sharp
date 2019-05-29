@@ -57,21 +57,17 @@ namespace WebSocketSharp.Net
       _data = data;
     }
 
-    #endregion
+        #endregion
 
-    #region Public Properties
+        #region Public Properties
 
-    public int ReadLeft {
-      get {
-        return _data.Length - _offset;
-      }
-    }
+        public int ReadLeft => _data.Length - _offset;
 
-    #endregion
+        #endregion
 
-    #region Public Methods
+        #region Public Methods
 
-    public int Read (byte[] buffer, int offset, int count)
+        public int Read (byte[] buffer, int offset, int count)
     {
       var left = _data.Length - _offset;
       if (left == 0)

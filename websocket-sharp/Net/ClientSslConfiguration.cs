@@ -121,151 +121,135 @@ namespace WebSocketSharp.Net
     ///   </para>
     /// </value>
     public bool CheckCertificateRevocation {
-      get {
-        return _checkCertRevocation;
-      }
+      get => _checkCertRevocation;
 
-      set {
-        _checkCertRevocation = value;
-      }
+      set => _checkCertRevocation = value;
     }
 
-    /// <summary>
-    /// Gets or sets the certificates from which to select one to
-    /// supply to the server.
-    /// </summary>
-    /// <value>
-    ///   <para>
-    ///   A <see cref="X509CertificateCollection"/> or <see langword="null"/>.
-    ///   </para>
-    ///   <para>
-    ///   That collection contains client certificates from which to select.
-    ///   </para>
-    ///   <para>
-    ///   The default value is <see langword="null"/>.
-    ///   </para>
-    /// </value>
-    public X509CertificateCollection ClientCertificates {
-      get {
-        return _clientCerts;
-      }
+        /// <summary>
+        /// Gets or sets the certificates from which to select one to
+        /// supply to the server.
+        /// </summary>
+        /// <value>
+        ///   <para>
+        ///   A <see cref="X509CertificateCollection"/> or <see langword="null"/>.
+        ///   </para>
+        ///   <para>
+        ///   That collection contains client certificates from which to select.
+        ///   </para>
+        ///   <para>
+        ///   The default value is <see langword="null"/>.
+        ///   </para>
+        /// </value>
+        public X509CertificateCollection ClientCertificates {
+      get => _clientCerts;
 
-      set {
-        _clientCerts = value;
-      }
+      set => _clientCerts = value;
     }
 
-    /// <summary>
-    /// Gets or sets the callback used to select the certificate to
-    /// supply to the server.
-    /// </summary>
-    /// <remarks>
-    /// No certificate is supplied if the callback returns
-    /// <see langword="null"/>.
-    /// </remarks>
-    /// <value>
-    ///   <para>
-    ///   A <see cref="LocalCertificateSelectionCallback"/> delegate that
-    ///   invokes the method called for selecting the certificate.
-    ///   </para>
-    ///   <para>
-    ///   The default value is a delegate that invokes a method that
-    ///   only returns <see langword="null"/>.
-    ///   </para>
-    /// </value>
-    public LocalCertificateSelectionCallback ClientCertificateSelectionCallback {
-      get {
-        if (_clientCertSelectionCallback == null)
-          _clientCertSelectionCallback = defaultSelectClientCertificate;
+        /// <summary>
+        /// Gets or sets the callback used to select the certificate to
+        /// supply to the server.
+        /// </summary>
+        /// <remarks>
+        /// No certificate is supplied if the callback returns
+        /// <see langword="null"/>.
+        /// </remarks>
+        /// <value>
+        ///   <para>
+        ///   A <see cref="LocalCertificateSelectionCallback"/> delegate that
+        ///   invokes the method called for selecting the certificate.
+        ///   </para>
+        ///   <para>
+        ///   The default value is a delegate that invokes a method that
+        ///   only returns <see langword="null"/>.
+        ///   </para>
+        /// </value>
+        public LocalCertificateSelectionCallback ClientCertificateSelectionCallback
+        {
+            get
+            {
+                if (_clientCertSelectionCallback == null)
+                    _clientCertSelectionCallback = defaultSelectClientCertificate;
 
-        return _clientCertSelectionCallback;
-      }
+                return _clientCertSelectionCallback;
+            }
 
-      set {
-        _clientCertSelectionCallback = value;
-      }
+            set => _clientCertSelectionCallback = value;
+        }
+
+        /// <summary>
+        /// Gets or sets the protocols used for authentication.
+        /// </summary>
+        /// <value>
+        ///   <para>
+        ///   The <see cref="SslProtocols"/> enum values that represent
+        ///   the protocols used for authentication.
+        ///   </para>
+        ///   <para>
+        ///   The default value is <see cref="SslProtocols.Default"/>.
+        ///   </para>
+        /// </value>
+        public SslProtocols EnabledSslProtocols {
+      get => _enabledSslProtocols;
+
+      set => _enabledSslProtocols = value;
     }
 
-    /// <summary>
-    /// Gets or sets the protocols used for authentication.
-    /// </summary>
-    /// <value>
-    ///   <para>
-    ///   The <see cref="SslProtocols"/> enum values that represent
-    ///   the protocols used for authentication.
-    ///   </para>
-    ///   <para>
-    ///   The default value is <see cref="SslProtocols.Default"/>.
-    ///   </para>
-    /// </value>
-    public SslProtocols EnabledSslProtocols {
-      get {
-        return _enabledSslProtocols;
-      }
+        /// <summary>
+        /// Gets or sets the callback used to validate the certificate
+        /// supplied by the server.
+        /// </summary>
+        /// <remarks>
+        /// The certificate is valid if the callback returns <c>true</c>.
+        /// </remarks>
+        /// <value>
+        ///   <para>
+        ///   A <see cref="RemoteCertificateValidationCallback"/> delegate that
+        ///   invokes the method called for validating the certificate.
+        ///   </para>
+        ///   <para>
+        ///   The default value is a delegate that invokes a method that
+        ///   only returns <c>true</c>.
+        ///   </para>
+        /// </value>
+        public RemoteCertificateValidationCallback ServerCertificateValidationCallback
+        {
+            get
+            {
+                if (_serverCertValidationCallback == null)
+                    _serverCertValidationCallback = defaultValidateServerCertificate;
 
-      set {
-        _enabledSslProtocols = value;
-      }
+                return _serverCertValidationCallback;
+            }
+
+            set => _serverCertValidationCallback = value;
+        }
+
+        /// <summary>
+        /// Gets or sets the target host server name.
+        /// </summary>
+        /// <value>
+        ///   <para>
+        ///   A <see cref="string"/> or <see langword="null"/>
+        ///   if not specified.
+        ///   </para>
+        ///   <para>
+        ///   That string represents the name of the server that
+        ///   will share a secure connection with a client.
+        ///   </para>
+        /// </value>
+        public string TargetHost {
+      get => _targetHost;
+
+      set => _targetHost = value;
     }
 
-    /// <summary>
-    /// Gets or sets the callback used to validate the certificate
-    /// supplied by the server.
-    /// </summary>
-    /// <remarks>
-    /// The certificate is valid if the callback returns <c>true</c>.
-    /// </remarks>
-    /// <value>
-    ///   <para>
-    ///   A <see cref="RemoteCertificateValidationCallback"/> delegate that
-    ///   invokes the method called for validating the certificate.
-    ///   </para>
-    ///   <para>
-    ///   The default value is a delegate that invokes a method that
-    ///   only returns <c>true</c>.
-    ///   </para>
-    /// </value>
-    public RemoteCertificateValidationCallback ServerCertificateValidationCallback {
-      get {
-        if (_serverCertValidationCallback == null)
-          _serverCertValidationCallback = defaultValidateServerCertificate;
+        #endregion
 
-        return _serverCertValidationCallback;
-      }
+        #region Private Methods
 
-      set {
-        _serverCertValidationCallback = value;
-      }
-    }
-
-    /// <summary>
-    /// Gets or sets the target host server name.
-    /// </summary>
-    /// <value>
-    ///   <para>
-    ///   A <see cref="string"/> or <see langword="null"/>
-    ///   if not specified.
-    ///   </para>
-    ///   <para>
-    ///   That string represents the name of the server that
-    ///   will share a secure connection with a client.
-    ///   </para>
-    /// </value>
-    public string TargetHost {
-      get {
-        return _targetHost;
-      }
-
-      set {
-        _targetHost = value;
-      }
-    }
-
-    #endregion
-
-    #region Private Methods
-
-    private static X509Certificate defaultSelectClientCertificate (
+        private static X509Certificate defaultSelectClientCertificate (
       object sender,
       string targetHost,
       X509CertificateCollection clientCertificates,

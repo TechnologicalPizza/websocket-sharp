@@ -50,18 +50,18 @@ namespace WebSocketSharp.Net.WebSockets
     {
     }
 
-    #endregion
+        #endregion
 
-    #region Public Properties
+        #region Public Properties
 
-    /// <summary>
-    /// Gets the HTTP cookies included in the handshake request.
-    /// </summary>
-    /// <value>
-    /// A <see cref="WebSocketSharp.Net.CookieCollection"/> that contains
-    /// the cookies.
-    /// </value>
-    public abstract CookieCollection CookieCollection { get; }
+        /// <summary>
+        /// Gets the HTTP cookies included in the handshake request.
+        /// </summary>
+        /// <value>
+        /// A <see cref="Net.CookieCollection"/> that contains
+        /// the cookies.
+        /// </value>
+        public abstract CookieCollection CookieCollection { get; }
 
     /// <summary>
     /// Gets the HTTP headers included in the handshake request.

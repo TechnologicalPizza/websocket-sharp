@@ -75,97 +75,65 @@ namespace WebSocketSharp.Net
       _response = new HttpListenerResponse (this);
     }
 
-    #endregion
+        #endregion
 
-    #region Internal Properties
+        #region Internal Properties
 
-    internal HttpConnection Connection {
-      get {
-        return _connection;
-      }
+        internal HttpConnection Connection => _connection;
+
+        internal string ErrorMessage {
+      get => _error;
+
+      set => _error = value;
     }
 
-    internal string ErrorMessage {
-      get {
-        return _error;
-      }
+        internal int ErrorStatus {
+      get => _errorStatus;
 
-      set {
-        _error = value;
-      }
+      set => _errorStatus = value;
     }
 
-    internal int ErrorStatus {
-      get {
-        return _errorStatus;
-      }
+        internal bool HasError => _error != null;
 
-      set {
-        _errorStatus = value;
-      }
+        internal HttpListener Listener {
+      get => _listener;
+
+      set => _listener = value;
     }
 
-    internal bool HasError {
-      get {
-        return _error != null;
-      }
-    }
+        #endregion
 
-    internal HttpListener Listener {
-      get {
-        return _listener;
-      }
+        #region Public Properties
 
-      set {
-        _listener = value;
-      }
-    }
+        /// <summary>
+        /// Gets the HTTP request object that represents a client request.
+        /// </summary>
+        /// <value>
+        /// A <see cref="HttpListenerRequest"/> that represents the client request.
+        /// </value>
+        public HttpListenerRequest Request => _request;
 
-    #endregion
+        /// <summary>
+        /// Gets the HTTP response object used to send a response to the client.
+        /// </summary>
+        /// <value>
+        /// A <see cref="HttpListenerResponse"/> that represents a response to the client request.
+        /// </value>
+        public HttpListenerResponse Response => _response;
 
-    #region Public Properties
+        /// <summary>
+        /// Gets the client information (identity, authentication, and security roles).
+        /// </summary>
+        /// <value>
+        /// A <see cref="IPrincipal"/> instance that represents the client information.
+        /// </value>
+        public IPrincipal User => _user;
 
-    /// <summary>
-    /// Gets the HTTP request object that represents a client request.
-    /// </summary>
-    /// <value>
-    /// A <see cref="HttpListenerRequest"/> that represents the client request.
-    /// </value>
-    public HttpListenerRequest Request {
-      get {
-        return _request;
-      }
-    }
+        #endregion
 
-    /// <summary>
-    /// Gets the HTTP response object used to send a response to the client.
-    /// </summary>
-    /// <value>
-    /// A <see cref="HttpListenerResponse"/> that represents a response to the client request.
-    /// </value>
-    public HttpListenerResponse Response {
-      get {
-        return _response;
-      }
-    }
+        #region Internal Methods
 
-    /// <summary>
-    /// Gets the client information (identity, authentication, and security roles).
-    /// </summary>
-    /// <value>
-    /// A <see cref="IPrincipal"/> instance that represents the client information.
-    /// </value>
-    public IPrincipal User {
-      get {
-        return _user;
-      }
-    }
-
-    #endregion
-
-    #region Internal Methods
-
-    internal bool Authenticate ()
+        internal bool Authenticate ()
     {
       var schm = _listener.SelectAuthenticationScheme (_request);
       if (schm == AuthenticationSchemes.Anonymous)

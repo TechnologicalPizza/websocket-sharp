@@ -510,138 +510,114 @@ namespace WebSocketSharp.Net
     {
     }
 
-    #endregion
+        #endregion
 
-    #region Internal Properties
+        #region Internal Properties
 
-    internal HttpHeaderType State {
-      get {
-        return _state;
-      }
+        internal HttpHeaderType State => _state;
+
+        #endregion
+
+        #region Public Properties
+
+        /// <summary>
+        /// Gets all header names in the collection.
+        /// </summary>
+        /// <value>
+        /// An array of <see cref="string"/> that contains all header names in the collection.
+        /// </value>
+        public override string[] AllKeys => base.AllKeys;
+
+        /// <summary>
+        /// Gets the number of headers in the collection.
+        /// </summary>
+        /// <value>
+        /// An <see cref="int"/> that represents the number of headers in the collection.
+        /// </value>
+        public override int Count => base.Count;
+
+        /// <summary>
+        /// Gets or sets the specified request <paramref name="header"/> in the collection.
+        /// </summary>
+        /// <value>
+        /// A <see cref="string"/> that represents the value of the request <paramref name="header"/>.
+        /// </value>
+        /// <param name="header">
+        /// One of the <see cref="HttpRequestHeader"/> enum values, represents
+        /// the request header to get or set.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        ///   <para>
+        ///   <paramref name="header"/> is a restricted header.
+        ///   </para>
+        ///   <para>
+        ///   -or-
+        ///   </para>
+        ///   <para>
+        ///   <paramref name="value"/> contains invalid characters.
+        ///   </para>
+        /// </exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// The length of <paramref name="value"/> is greater than 65,535 characters.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// The current <see cref="WebHeaderCollection"/> instance doesn't allow
+        /// the request <paramref name="header"/>.
+        /// </exception>
+        public string this[HttpRequestHeader header] {
+      get => Get(Convert(header));
+
+      set => Add(header, value);
     }
 
-    #endregion
+        /// <summary>
+        /// Gets or sets the specified response <paramref name="header"/> in the collection.
+        /// </summary>
+        /// <value>
+        /// A <see cref="string"/> that represents the value of the response <paramref name="header"/>.
+        /// </value>
+        /// <param name="header">
+        /// One of the <see cref="HttpResponseHeader"/> enum values, represents
+        /// the response header to get or set.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        ///   <para>
+        ///   <paramref name="header"/> is a restricted header.
+        ///   </para>
+        ///   <para>
+        ///   -or-
+        ///   </para>
+        ///   <para>
+        ///   <paramref name="value"/> contains invalid characters.
+        ///   </para>
+        /// </exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// The length of <paramref name="value"/> is greater than 65,535 characters.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// The current <see cref="WebHeaderCollection"/> instance doesn't allow
+        /// the response <paramref name="header"/>.
+        /// </exception>
+        public string this[HttpResponseHeader header] {
+      get => Get(Convert(header));
 
-    #region Public Properties
-
-    /// <summary>
-    /// Gets all header names in the collection.
-    /// </summary>
-    /// <value>
-    /// An array of <see cref="string"/> that contains all header names in the collection.
-    /// </value>
-    public override string[] AllKeys {
-      get {
-        return base.AllKeys;
-      }
+      set => Add(header, value);
     }
 
-    /// <summary>
-    /// Gets the number of headers in the collection.
-    /// </summary>
-    /// <value>
-    /// An <see cref="int"/> that represents the number of headers in the collection.
-    /// </value>
-    public override int Count {
-      get {
-        return base.Count;
-      }
-    }
+        /// <summary>
+        /// Gets a collection of header names in the collection.
+        /// </summary>
+        /// <value>
+        /// A <see cref="NameObjectCollectionBase.KeysCollection"/> that contains
+        /// all header names in the collection.
+        /// </value>
+        public override KeysCollection Keys => base.Keys;
 
-    /// <summary>
-    /// Gets or sets the specified request <paramref name="header"/> in the collection.
-    /// </summary>
-    /// <value>
-    /// A <see cref="string"/> that represents the value of the request <paramref name="header"/>.
-    /// </value>
-    /// <param name="header">
-    /// One of the <see cref="HttpRequestHeader"/> enum values, represents
-    /// the request header to get or set.
-    /// </param>
-    /// <exception cref="ArgumentException">
-    ///   <para>
-    ///   <paramref name="header"/> is a restricted header.
-    ///   </para>
-    ///   <para>
-    ///   -or-
-    ///   </para>
-    ///   <para>
-    ///   <paramref name="value"/> contains invalid characters.
-    ///   </para>
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// The length of <paramref name="value"/> is greater than 65,535 characters.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The current <see cref="WebHeaderCollection"/> instance doesn't allow
-    /// the request <paramref name="header"/>.
-    /// </exception>
-    public string this[HttpRequestHeader header] {
-      get {
-        return Get (Convert (header));
-      }
+        #endregion
 
-      set {
-        Add (header, value);
-      }
-    }
+        #region Private Methods
 
-    /// <summary>
-    /// Gets or sets the specified response <paramref name="header"/> in the collection.
-    /// </summary>
-    /// <value>
-    /// A <see cref="string"/> that represents the value of the response <paramref name="header"/>.
-    /// </value>
-    /// <param name="header">
-    /// One of the <see cref="HttpResponseHeader"/> enum values, represents
-    /// the response header to get or set.
-    /// </param>
-    /// <exception cref="ArgumentException">
-    ///   <para>
-    ///   <paramref name="header"/> is a restricted header.
-    ///   </para>
-    ///   <para>
-    ///   -or-
-    ///   </para>
-    ///   <para>
-    ///   <paramref name="value"/> contains invalid characters.
-    ///   </para>
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// The length of <paramref name="value"/> is greater than 65,535 characters.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The current <see cref="WebHeaderCollection"/> instance doesn't allow
-    /// the response <paramref name="header"/>.
-    /// </exception>
-    public string this[HttpResponseHeader header] {
-      get {
-        return Get (Convert (header));
-      }
-
-      set {
-        Add (header, value);
-      }
-    }
-
-    /// <summary>
-    /// Gets a collection of header names in the collection.
-    /// </summary>
-    /// <value>
-    /// A <see cref="NameObjectCollectionBase.KeysCollection"/> that contains
-    /// all header names in the collection.
-    /// </value>
-    public override NameObjectCollectionBase.KeysCollection Keys {
-      get {
-        return base.Keys;
-      }
-    }
-
-    #endregion
-
-    #region Private Methods
-
-    private void add (string name, string value, bool ignoreRestricted)
+        private void add (string name, string value, bool ignoreRestricted)
     {
       var act = ignoreRestricted
                 ? (Action <string, string>) addWithoutCheckingNameAndRestricted
@@ -716,7 +692,7 @@ namespace WebSocketSharp.Net
     private static string checkValue (string value)
     {
       if (value == null || value.Length == 0)
-        return String.Empty;
+        return string.Empty;
 
       value = value.Trim ();
       if (value.Length > 65535)
@@ -730,9 +706,8 @@ namespace WebSocketSharp.Net
 
     private static string convert (string key)
     {
-      HttpHeaderInfo info;
-      return _headers.TryGetValue (key, out info) ? info.Name : String.Empty;
-    }
+            return _headers.TryGetValue(key, out HttpHeaderInfo info) ? info.Name : string.Empty;
+        }
 
     private void doWithCheckingState (
       Action <string, string> action, string name, string value, bool setState)

@@ -126,57 +126,29 @@ namespace WebSocketSharp.Net
       init ();
     }
 
-    #endregion
+        #endregion
 
-    #region Public Properties
+        #region Public Properties
 
-    public bool IsClosed {
-      get {
-        return _socket == null;
-      }
-    }
+        public bool IsClosed => _socket == null;
 
-    public bool IsLocal {
-      get {
-        return ((IPEndPoint) _remoteEndPoint).Address.IsLocal ();
-      }
-    }
+        public bool IsLocal => ((IPEndPoint)_remoteEndPoint).Address.IsLocal();
 
-    public bool IsSecure {
-      get {
-        return _secure;
-      }
-    }
+        public bool IsSecure => _secure;
 
-    public IPEndPoint LocalEndPoint {
-      get {
-        return (IPEndPoint) _localEndPoint;
-      }
-    }
+        public IPEndPoint LocalEndPoint => (IPEndPoint)_localEndPoint;
 
-    public IPEndPoint RemoteEndPoint {
-      get {
-        return (IPEndPoint) _remoteEndPoint;
-      }
-    }
+        public IPEndPoint RemoteEndPoint => (IPEndPoint)_remoteEndPoint;
 
-    public int Reuses {
-      get {
-        return _reuses;
-      }
-    }
+        public int Reuses => _reuses;
 
-    public Stream Stream {
-      get {
-        return _stream;
-      }
-    }
+        public Stream Stream => _stream;
 
-    #endregion
+        #endregion
 
-    #region Private Methods
+        #region Private Methods
 
-    private void close ()
+        private void close ()
     {
       lock (_sync) {
         if (_socket == null)
@@ -298,13 +270,13 @@ namespace WebSocketSharp.Net
             return;
           }
 
-          HttpListener lsnr;
-          if (!conn._listener.TrySearchHttpListener (conn._context.Request.Url, out lsnr)) {
-            conn.SendError (null, 404);
-            return;
-          }
+                    if (!conn._listener.TrySearchHttpListener(conn._context.Request.Url, out HttpListener lsnr))
+                    {
+                        conn.SendError(null, 404);
+                        return;
+                    }
 
-          if (conn._lastListener != lsnr) {
+                    if (conn._lastListener != lsnr) {
             conn.removeConnection ();
             if (!lsnr.AddConnection (conn)) {
               conn.close ();
@@ -353,8 +325,8 @@ namespace WebSocketSharp.Net
       if (_currentLine == null)
         _currentLine = new StringBuilder (64);
 
-      var nread = 0;
-      try {
+            int nread;
+            try {
         string line;
         while ((line = readLineFrom (data, _position, length, out nread)) != null) {
           _position += nread;

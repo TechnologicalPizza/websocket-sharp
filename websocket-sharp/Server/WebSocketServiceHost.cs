@@ -76,92 +76,72 @@ namespace WebSocketSharp.Server
       _sessions = new WebSocketSessionManager (log);
     }
 
-    #endregion
+        #endregion
 
-    #region Internal Properties
+        #region Internal Properties
 
-    internal ServerState State {
-      get {
-        return _sessions.State;
-      }
+        internal ServerState State => _sessions.State;
+
+        #endregion
+
+        #region Protected Properties
+
+        /// <summary>
+        /// Gets the logging function for the service.
+        /// </summary>
+        /// <value>
+        /// A <see cref="Logger"/> that provides the logging function.
+        /// </value>
+        protected Logger Log => _log;
+
+        #endregion
+
+        #region Public Properties
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the service cleans up
+        /// the inactive sessions periodically.
+        /// </summary>
+        /// <remarks>
+        /// The set operation does nothing if the service has already started or
+        /// it is shutting down.
+        /// </remarks>
+        /// <value>
+        /// <c>true</c> if the service cleans up the inactive sessions every
+        /// 60 seconds; otherwise, <c>false</c>.
+        /// </value>
+        public bool KeepClean {
+      get => _sessions.KeepClean;
+
+      set => _sessions.KeepClean = value;
     }
 
-    #endregion
+        /// <summary>
+        /// Gets the path to the service.
+        /// </summary>
+        /// <value>
+        /// A <see cref="string"/> that represents the absolute path to
+        /// the service.
+        /// </value>
+        public string Path => _path;
 
-    #region Protected Properties
+        /// <summary>
+        /// Gets the management function for the sessions in the service.
+        /// </summary>
+        /// <value>
+        /// A <see cref="WebSocketSessionManager"/> that manages the sessions in
+        /// the service.
+        /// </value>
+        public WebSocketSessionManager Sessions => _sessions;
 
-    /// <summary>
-    /// Gets the logging function for the service.
-    /// </summary>
-    /// <value>
-    /// A <see cref="Logger"/> that provides the logging function.
-    /// </value>
-    protected Logger Log {
-      get {
-        return _log;
-      }
-    }
-
-    #endregion
-
-    #region Public Properties
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the service cleans up
-    /// the inactive sessions periodically.
-    /// </summary>
-    /// <remarks>
-    /// The set operation does nothing if the service has already started or
-    /// it is shutting down.
-    /// </remarks>
-    /// <value>
-    /// <c>true</c> if the service cleans up the inactive sessions every
-    /// 60 seconds; otherwise, <c>false</c>.
-    /// </value>
-    public bool KeepClean {
-      get {
-        return _sessions.KeepClean;
-      }
-
-      set {
-        _sessions.KeepClean = value;
-      }
-    }
-
-    /// <summary>
-    /// Gets the path to the service.
-    /// </summary>
-    /// <value>
-    /// A <see cref="string"/> that represents the absolute path to
-    /// the service.
-    /// </value>
-    public string Path {
-      get {
-        return _path;
-      }
-    }
-
-    /// <summary>
-    /// Gets the management function for the sessions in the service.
-    /// </summary>
-    /// <value>
-    /// A <see cref="WebSocketSessionManager"/> that manages the sessions in
-    /// the service.
-    /// </value>
-    public WebSocketSessionManager Sessions {
-      get {
-        return _sessions;
-      }
-    }
-
-    /// <summary>
-    /// Gets the <see cref="Type"/> of the behavior of the service.
-    /// </summary>
-    /// <value>
-    /// A <see cref="Type"/> that represents the type of the behavior of
-    /// the service.
-    /// </value>
-    public abstract Type BehaviorType { get; }
+        /// <summary>
+        /// Gets the <see cref="Type"/> of the behavior of the service.
+        /// </summary>
+        /// <value>
+        /// A <see cref="Type"/> that represents the type of the behavior of
+        /// the service.
+        /// </value>
+        public abstract Type BehaviorType { get; }
 
     /// <summary>
     /// Gets or sets the time to wait for the response to the WebSocket Ping or
@@ -178,20 +158,16 @@ namespace WebSocketSharp.Server
     /// The value specified for a set operation is zero or less.
     /// </exception>
     public TimeSpan WaitTime {
-      get {
-        return _sessions.WaitTime;
-      }
+      get => _sessions.WaitTime;
 
-      set {
-        _sessions.WaitTime = value;
-      }
+      set => _sessions.WaitTime = value;
     }
 
-    #endregion
+        #endregion
 
-    #region Internal Methods
+        #region Internal Methods
 
-    internal void Start ()
+        internal void Start ()
     {
       _sessions.Start ();
     }

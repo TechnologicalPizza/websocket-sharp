@@ -80,49 +80,33 @@ namespace WebSocketSharp.Net
     #region Internal Properties
 
     internal bool EndCalled {
-      get {
-        return _endCalled;
-      }
+      get => _endCalled;
 
-      set {
-        _endCalled = value;
-      }
+      set => _endCalled = value;
     }
 
-    internal bool InGet {
-      get {
-        return _inGet;
-      }
+        internal bool InGet {
+      get => _inGet;
 
-      set {
-        _inGet = value;
-      }
+      set => _inGet = value;
     }
 
-    #endregion
+        #endregion
 
-    #region Public Properties
+        #region Public Properties
 
-    public object AsyncState {
-      get {
-        return _state;
-      }
-    }
+        public object AsyncState => _state;
 
-    public WaitHandle AsyncWaitHandle {
+        public WaitHandle AsyncWaitHandle {
       get {
         lock (_sync)
           return _waitHandle ?? (_waitHandle = new ManualResetEvent (_completed));
       }
     }
 
-    public bool CompletedSynchronously {
-      get {
-        return _syncCompleted;
-      }
-    }
+        public bool CompletedSynchronously => _syncCompleted;
 
-    public bool IsCompleted {
+        public bool IsCompleted {
       get {
         lock (_sync)
           return _completed;

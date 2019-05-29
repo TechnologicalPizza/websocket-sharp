@@ -61,22 +61,18 @@ namespace WebSocketSharp.Net
       _password = password;
     }
 
-    #endregion
+        #endregion
 
-    #region Public Properties
+        #region Public Properties
 
-    /// <summary>
-    /// Gets the password from a basic authentication attempt.
-    /// </summary>
-    /// <value>
-    /// A <see cref="string"/> that represents the password.
-    /// </value>
-    public virtual string Password {
-      get {
-        return _password;
-      }
+        /// <summary>
+        /// Gets the password from a basic authentication attempt.
+        /// </summary>
+        /// <value>
+        /// A <see cref="string"/> that represents the password.
+        /// </value>
+        public virtual string Password => _password;
+
+        #endregion
     }
-
-    #endregion
-  }
 }

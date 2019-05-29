@@ -47,55 +47,31 @@ namespace WebSocketSharp.Net
       _type = type;
     }
 
-    #endregion
+        #endregion
 
-    #region Internal Properties
+        #region Internal Properties
 
-    internal bool IsMultiValueInRequest {
-      get {
-        return (_type & HttpHeaderType.MultiValueInRequest) == HttpHeaderType.MultiValueInRequest;
-      }
-    }
+        internal bool IsMultiValueInRequest => (_type & HttpHeaderType.MultiValueInRequest) == HttpHeaderType.MultiValueInRequest;
 
-    internal bool IsMultiValueInResponse {
-      get {
-        return (_type & HttpHeaderType.MultiValueInResponse) == HttpHeaderType.MultiValueInResponse;
-      }
-    }
+        internal bool IsMultiValueInResponse => (_type & HttpHeaderType.MultiValueInResponse) == HttpHeaderType.MultiValueInResponse;
 
-    #endregion
+        #endregion
 
-    #region Public Properties
+        #region Public Properties
 
-    public bool IsRequest {
-      get {
-        return (_type & HttpHeaderType.Request) == HttpHeaderType.Request;
-      }
-    }
+        public bool IsRequest => (_type & HttpHeaderType.Request) == HttpHeaderType.Request;
 
-    public bool IsResponse {
-      get {
-        return (_type & HttpHeaderType.Response) == HttpHeaderType.Response;
-      }
-    }
+        public bool IsResponse => (_type & HttpHeaderType.Response) == HttpHeaderType.Response;
 
-    public string Name {
-      get {
-        return _name;
-      }
-    }
+        public string Name => _name;
 
-    public HttpHeaderType Type {
-      get {
-        return _type;
-      }
-    }
+        public HttpHeaderType Type => _type;
 
-    #endregion
+        #endregion
 
-    #region Public Methods
+        #region Public Methods
 
-    public bool IsMultiValue (bool response)
+        public bool IsMultiValue (bool response)
     {
       return (_type & HttpHeaderType.MultiValue) == HttpHeaderType.MultiValue
              ? (response ? IsResponse : IsRequest)

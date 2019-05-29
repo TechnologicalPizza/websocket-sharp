@@ -87,23 +87,19 @@ namespace WebSocketSharp
       _code = code;
     }
 
-    #endregion
+        #endregion
 
-    #region Public Properties
+        #region Public Properties
 
-    /// <summary>
-    /// Gets the status code indicating the cause of the exception.
-    /// </summary>
-    /// <value>
-    /// One of the <see cref="CloseStatusCode"/> enum values that represents
-    /// the status code indicating the cause of the exception.
-    /// </value>
-    public CloseStatusCode Code {
-      get {
-        return _code;
-      }
+        /// <summary>
+        /// Gets the status code indicating the cause of the exception.
+        /// </summary>
+        /// <value>
+        /// One of the <see cref="CloseStatusCode"/> enum values that represents
+        /// the status code indicating the cause of the exception.
+        /// </value>
+        public CloseStatusCode Code => _code;
+
+        #endregion
     }
-
-    #endregion
-  }
 }

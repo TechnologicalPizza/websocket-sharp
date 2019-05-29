@@ -32,25 +32,25 @@ using System.IO;
 
 namespace WebSocketSharp
 {
-  /// <summary>
-  /// Provides a set of methods and properties for logging.
-  /// </summary>
-  /// <remarks>
-  ///   <para>
-  ///   If you output a log with lower than the value of the <see cref="Logger.Level"/> property,
-  ///   it cannot be outputted.
-  ///   </para>
-  ///   <para>
-  ///   The default output action writes a log to the standard output stream and the log file
-  ///   if the <see cref="Logger.File"/> property has a valid path to it.
-  ///   </para>
-  ///   <para>
-  ///   If you would like to use the custom output action, you should set
-  ///   the <see cref="Logger.Output"/> property to any <c>Action&lt;LogData, string&gt;</c>
-  ///   delegate.
-  ///   </para>
-  /// </remarks>
-  public class Logger
+    /// <summary>
+    /// Provides a set of methods and properties for logging.
+    /// </summary>
+    /// <remarks>
+    ///   <para>
+    ///   If you output a log with lower than the value of the <see cref="Level"/> property,
+    ///   it cannot be outputted.
+    ///   </para>
+    ///   <para>
+    ///   The default output action writes a log to the standard output stream and the log file
+    ///   if the <see cref="File"/> property has a valid path to it.
+    ///   </para>
+    ///   <para>
+    ///   If you would like to use the custom output action, you should set
+    ///   the <see cref="Output"/> property to any <c>Action&lt;LogData, string&gt;</c>
+    ///   delegate.
+    ///   </para>
+    /// </remarks>
+    public class Logger
   {
     #region Private Fields
 
@@ -120,74 +120,77 @@ namespace WebSocketSharp
     /// <value>
     /// A <see cref="string"/> that represents the current path to the log file if any.
     /// </value>
-    public string File {
-      get {
-        return _file;
-      }
+    public string File
+        {
+            get => _file;
 
-      set {
-        lock (_sync) {
-          _file = value;
-          Warn (
-            String.Format ("The current path to the log file has been changed to {0}.", _file));
+            set
+            {
+                lock (_sync)
+                {
+                    _file = value;
+                    Warn(
+                      string.Format("The current path to the log file has been changed to {0}.", _file));
+                }
+            }
         }
-      }
-    }
 
-    /// <summary>
-    /// Gets or sets the current logging level.
-    /// </summary>
-    /// <remarks>
-    /// A log with lower than the value of this property cannot be outputted.
-    /// </remarks>
-    /// <value>
-    /// One of the <see cref="LogLevel"/> enum values, specifies the current logging level.
-    /// </value>
-    public LogLevel Level {
-      get {
-        return _level;
-      }
+        /// <summary>
+        /// Gets or sets the current logging level.
+        /// </summary>
+        /// <remarks>
+        /// A log with lower than the value of this property cannot be outputted.
+        /// </remarks>
+        /// <value>
+        /// One of the <see cref="LogLevel"/> enum values, specifies the current logging level.
+        /// </value>
+        public LogLevel Level
+        {
+            get => _level;
 
-      set {
-        lock (_sync) {
-          _level = value;
-          Warn (String.Format ("The current logging level has been changed to {0}.", _level));
+            set
+            {
+                lock (_sync)
+                {
+                    _level = value;
+                    Warn(string.Format("The current logging level has been changed to {0}.", _level));
+                }
+            }
         }
-      }
-    }
 
-    /// <summary>
-    /// Gets or sets the current output action used to output a log.
-    /// </summary>
-    /// <value>
-    ///   <para>
-    ///   An <c>Action&lt;LogData, string&gt;</c> delegate that references the method(s) used to
-    ///   output a log. A <see cref="string"/> parameter passed to this delegate is the value of
-    ///   the <see cref="Logger.File"/> property.
-    ///   </para>
-    ///   <para>
-    ///   If the value to set is <see langword="null"/>, the current output action is changed to
-    ///   the default output action.
-    ///   </para>
-    /// </value>
-    public Action<LogData, string> Output {
-      get {
-        return _output;
-      }
+        /// <summary>
+        /// Gets or sets the current output action used to output a log.
+        /// </summary>
+        /// <value>
+        ///   <para>
+        ///   An <c>Action&lt;LogData, string&gt;</c> delegate that references the method(s) used to
+        ///   output a log. A <see cref="string"/> parameter passed to this delegate is the value of
+        ///   the <see cref="File"/> property.
+        ///   </para>
+        ///   <para>
+        ///   If the value to set is <see langword="null"/>, the current output action is changed to
+        ///   the default output action.
+        ///   </para>
+        /// </value>
+        public Action<LogData, string> Output
+        {
+            get => _output;
 
-      set {
-        lock (_sync) {
-          _output = value ?? defaultOutput;
-          Warn ("The current output action has been changed.");
+            set
+            {
+                lock (_sync)
+                {
+                    _output = value ?? defaultOutput;
+                    Warn("The current output action has been changed.");
+                }
+            }
         }
-      }
-    }
 
-    #endregion
+        #endregion
 
-    #region Private Methods
+        #region Private Methods
 
-    private static void defaultOutput (LogData data, string path)
+        private static void defaultOutput (LogData data, string path)
     {
       var log = data.ToString ();
       Console.WriteLine (log);

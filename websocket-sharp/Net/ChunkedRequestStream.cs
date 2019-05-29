@@ -69,20 +69,16 @@ namespace WebSocketSharp.Net
     #region Internal Properties
 
     internal ChunkStream Decoder {
-      get {
-        return _decoder;
-      }
+      get => _decoder;
 
-      set {
-        _decoder = value;
-      }
+      set => _decoder = value;
     }
 
-    #endregion
+        #endregion
 
-    #region Private Methods
+        #region Private Methods
 
-    private void onRead (IAsyncResult asyncResult)
+        private void onRead (IAsyncResult asyncResult)
     {
       var rstate = (ReadBufferState) asyncResult.AsyncState;
       var ares = rstate.AsyncResult;
@@ -187,11 +183,10 @@ namespace WebSocketSharp.Net
       if (asyncResult == null)
         throw new ArgumentNullException ("asyncResult");
 
-      var ares = asyncResult as HttpStreamAsyncResult;
-      if (ares == null)
-        throw new ArgumentException ("A wrong IAsyncResult.", "asyncResult");
+            if (!(asyncResult is HttpStreamAsyncResult ares))
+                throw new ArgumentException("A wrong IAsyncResult.", "asyncResult");
 
-      if (!ares.IsCompleted)
+            if (!ares.IsCompleted)
         ares.AsyncWaitHandle.WaitOne ();
 
       if (ares.HasException)

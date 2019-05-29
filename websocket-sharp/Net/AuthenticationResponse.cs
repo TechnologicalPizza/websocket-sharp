@@ -88,77 +88,51 @@ namespace WebSocketSharp.Net
     #region Internal Properties
 
     internal uint NonceCount {
-      get {
-        return _nonceCount < UInt32.MaxValue
+      get => _nonceCount < uint.MaxValue
                ? _nonceCount
                : 0;
-      }
     }
 
-    #endregion
+        #endregion
 
-    #region Public Properties
+        #region Public Properties
 
-    public string Cnonce {
-      get {
-        return Parameters["cnonce"];
-      }
-    }
+        public string Cnonce => Parameters["cnonce"];
 
-    public string Nc {
-      get {
-        return Parameters["nc"];
-      }
-    }
+        public string Nc => Parameters["nc"];
 
-    public string Password {
-      get {
-        return Parameters["password"];
-      }
-    }
+        public string Password => Parameters["password"];
 
-    public string Response {
-      get {
-        return Parameters["response"];
-      }
-    }
+        public string Response => Parameters["response"];
 
-    public string Uri {
-      get {
-        return Parameters["uri"];
-      }
-    }
+        public string Uri => Parameters["uri"];
 
-    public string UserName {
-      get {
-        return Parameters["username"];
-      }
-    }
+        public string UserName => Parameters["username"];
 
-    #endregion
+        #endregion
 
-    #region Private Methods
+        #region Private Methods
 
-    private static string createA1 (string username, string password, string realm)
+        private static string createA1 (string username, string password, string realm)
     {
-      return String.Format ("{0}:{1}:{2}", username, realm, password);
+      return string.Format ("{0}:{1}:{2}", username, realm, password);
     }
 
     private static string createA1 (
       string username, string password, string realm, string nonce, string cnonce)
     {
-      return String.Format (
+      return string.Format (
         "{0}:{1}:{2}", hash (createA1 (username, password, realm)), nonce, cnonce);
     }
 
     private static string createA2 (string method, string uri)
     {
-      return String.Format ("{0}:{1}", method, uri);
+      return string.Format ("{0}:{1}", method, uri);
     }
 
     private static string createA2 (string method, string uri, string entity)
     {
-      return String.Format ("{0}:{1}:{2}", method, uri, hash (entity));
+      return string.Format ("{0}:{1}:{2}", method, uri, hash (entity));
     }
 
     private static string hash (string value)
@@ -181,7 +155,7 @@ namespace WebSocketSharp.Net
         if (qops.Split (',').Contains (qop => qop.Trim ().ToLower () == "auth")) {
           Parameters["qop"] = "auth";
           Parameters["cnonce"] = CreateNonceValue ();
-          Parameters["nc"] = String.Format ("{0:x8}", ++_nonceCount);
+          Parameters["nc"] = string.Format ("{0:x8}", ++_nonceCount);
         }
         else {
           Parameters["qop"] = null;
@@ -219,10 +193,10 @@ namespace WebSocketSharp.Net
 
       var secret = hash (a1);
       var data = qop != null
-                 ? String.Format ("{0}:{1}:{2}:{3}:{4}", nonce, nc, cnonce, qop, hash (a2))
-                 : String.Format ("{0}:{1}", nonce, hash (a2));
+                 ? string.Format ("{0}:{1}:{2}:{3}:{4}", nonce, nc, cnonce, qop, hash (a2))
+                 : string.Format ("{0}:{1}", nonce, hash (a2));
 
-      return hash (String.Format ("{0}:{1}", secret, data));
+      return hash (string.Format ("{0}:{1}", secret, data));
     }
 
     internal static AuthenticationResponse Parse (string value)
@@ -255,7 +229,7 @@ namespace WebSocketSharp.Net
       // The format is [<domain>\]<username>:<password>.
       var i = userPass.IndexOf (':');
       var user = userPass.Substring (0, i);
-      var pass = i < userPass.Length - 1 ? userPass.Substring (i + 1) : String.Empty;
+      var pass = i < userPass.Length - 1 ? userPass.Substring (i + 1) : string.Empty;
 
       // Check if 'domain' exists.
       i = user.IndexOf ('\\');
@@ -271,7 +245,7 @@ namespace WebSocketSharp.Net
 
     internal override string ToBasicString ()
     {
-      var userPass = String.Format ("{0}:{1}", Parameters["username"], Parameters["password"]);
+      var userPass = string.Format ("{0}:{1}", Parameters["username"], Parameters["password"]);
       var cred = Convert.ToBase64String (Encoding.UTF8.GetBytes (userPass));
 
       return "Basic " + cred;

@@ -78,37 +78,25 @@ namespace WebSocketSharp.Net
       Write (buffer, offset, count);
     }
 
-    #endregion
+        #endregion
 
-    #region Internal Properties
+        #region Internal Properties
 
-    internal WebHeaderCollection Headers {
-      get {
-        return _headers;
-      }
-    }
+        internal WebHeaderCollection Headers => _headers;
 
-    #endregion
+        #endregion
 
-    #region Public Properties
+        #region Public Properties
 
-    public int ChunkLeft {
-      get {
-        return _chunkSize - _chunkRead;
-      }
-    }
+        public int ChunkLeft => _chunkSize - _chunkRead;
 
-    public bool WantMore {
-      get {
-        return _state != InputChunkState.End;
-      }
-    }
+        public bool WantMore => _state != InputChunkState.End;
 
-    #endregion
+        #endregion
 
-    #region Private Methods
+        #region Private Methods
 
-    private int read (byte[] buffer, int offset, int count)
+        private int read (byte[] buffer, int offset, int count)
     {
       var nread = 0;
 
@@ -189,7 +177,7 @@ namespace WebSocketSharp.Net
 
       _chunkRead = 0;
       try {
-        _chunkSize = Int32.Parse (
+        _chunkSize = int.Parse (
           removeChunkExtension (_saved.ToString ()), NumberStyles.HexNumber);
       }
       catch {

@@ -106,22 +106,18 @@ namespace WebSocketSharp.Net
     {
     }
 
-    #endregion
+        #endregion
 
-    #region Public Properties
+        #region Public Properties
 
-    /// <summary>
-    /// Gets the error code that identifies the error that occurred.
-    /// </summary>
-    /// <value>
-    /// An <see cref="int"/> that identifies the error.
-    /// </value>
-    public override int ErrorCode {
-      get {
-        return NativeErrorCode;
-      }
+        /// <summary>
+        /// Gets the error code that identifies the error that occurred.
+        /// </summary>
+        /// <value>
+        /// An <see cref="int"/> that identifies the error.
+        /// </value>
+        public override int ErrorCode => NativeErrorCode;
+
+        #endregion
     }
-
-    #endregion
-  }
 }
