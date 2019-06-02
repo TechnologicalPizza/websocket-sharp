@@ -74,9 +74,11 @@ namespace WebSocketSharp.Memory
         public const int DefaultLargeBufferMultiple = 512 * 1024;
         public const int DefaultMaximumBufferSize = 8 * 1024 * 1024;
 
+        public const int DefaultCharBlockSize = 40 * 1024;
+
         private readonly int blockSize;
-        private readonly long[] largeBufferFreeSize;
-        private readonly long[] largeBufferInUseSize;
+        private readonly long[] _largeBufferFreeSize;
+        private readonly long[] _largeBufferInUseSize;
 
         private readonly int largeBufferMultiple;
 
@@ -86,15 +88,17 @@ namespace WebSocketSharp.Memory
         /// pools[2] = 3x(multiple)/4x(exponential) largeBufferMultiple buffers
         /// etc., up to maximumBufferSize
         /// </summary>
-        private readonly ConcurrentStack<byte[]>[] largePools;
+        private readonly ConcurrentStack<byte[]>[] _largePools;
 
         private readonly int maximumBufferSize;
         private readonly bool useExponentialLargeBuffer;
 
-        private readonly ConcurrentStack<byte[]> smallPool;
-
+        private readonly ConcurrentStack<byte[]> _smallPool;
         private long smallPoolFreeSize;
         private long smallPoolInUseSize;
+
+        private readonly Stack<List<byte[]>> _arrayListPool;
+        private readonly Stack<StreamReader> _streamReaderPool;
 
         /// <summary>
         /// Initializes the memory manager with the default block/buffer specifications.
@@ -141,7 +145,7 @@ namespace WebSocketSharp.Memory
             this.maximumBufferSize = maximumBufferSize;
             this.useExponentialLargeBuffer = useExponentialLargeBuffer;
 
-            if (!this.IsLargeBufferSize(maximumBufferSize))
+            if (!IsLargeBufferSize(maximumBufferSize))
             {
                 throw new ArgumentException(
                     string.Format("maximumBufferSize is not {0} of largeBufferMultiple",
@@ -149,19 +153,22 @@ namespace WebSocketSharp.Memory
                     nameof(maximumBufferSize));
             }
 
-            this.smallPool = new ConcurrentStack<byte[]>();
+            _arrayListPool = new Stack<List<byte[]>>();
+            _streamReaderPool = new Stack<StreamReader>();
+
+            _smallPool = new ConcurrentStack<byte[]>();
             var numLargePools = useExponentialLargeBuffer
                                     ? ((int)Math.Log(maximumBufferSize / largeBufferMultiple, 2) + 1)
                                     : (maximumBufferSize / largeBufferMultiple);
 
             // +1 to store size of bytes in use that are too large to be pooled
-            this.largeBufferInUseSize = new long[numLargePools + 1];
-            this.largeBufferFreeSize = new long[numLargePools];
+            _largeBufferInUseSize = new long[numLargePools + 1];
+            _largeBufferFreeSize = new long[numLargePools];
 
-            this.largePools = new ConcurrentStack<byte[]>[numLargePools];
+            _largePools = new ConcurrentStack<byte[]>[numLargePools];
 
-            for (var i = 0; i < this.largePools.Length; ++i)
-                this.largePools[i] = new ConcurrentStack<byte[]>();
+            for (var i = 0; i < _largePools.Length; ++i)
+                _largePools[i] = new ConcurrentStack<byte[]>();
 
             Events.Writer.MemoryStreamManagerInitialized(blockSize, largeBufferMultiple, maximumBufferSize);
         }
@@ -169,39 +176,39 @@ namespace WebSocketSharp.Memory
         /// <summary>
         /// The size of each block. It must be set at creation and cannot be changed.
         /// </summary>
-        public int BlockSize => this.blockSize;
+        public int BlockSize => blockSize;
 
         /// <summary>
         /// All buffers are multiples/exponentials of this number. It must be set at creation and cannot be changed.
         /// </summary>
-        public int LargeBufferMultiple => this.largeBufferMultiple;
+        public int LargeBufferMultiple => largeBufferMultiple;
 
         /// <summary>
         /// Use multiple large buffer allocation strategy. It must be set at creation and cannot be changed.
         /// </summary>
-        public bool UseMultipleLargeBuffer => !this.useExponentialLargeBuffer;
+        public bool UseMultipleLargeBuffer => !useExponentialLargeBuffer;
 
         /// <summary>
         /// Use exponential large buffer allocation strategy. It must be set at creation and cannot be changed.
         /// </summary>
-        public bool UseExponentialLargeBuffer => this.useExponentialLargeBuffer;
+        public bool UseExponentialLargeBuffer => useExponentialLargeBuffer;
 
         /// <summary>
         /// Gets or sets the maximum buffer size.
         /// </summary>
         /// <remarks>Any buffer that is returned to the pool that is larger than this will be
         /// discarded and garbage collected.</remarks>
-        public int MaximumBufferSize => this.maximumBufferSize;
+        public int MaximumBufferSize => maximumBufferSize;
 
         /// <summary>
         /// Number of bytes in small pool not currently in use
         /// </summary>
-        public long SmallPoolFreeSize => this.smallPoolFreeSize;
+        public long SmallPoolFreeSize => smallPoolFreeSize;
 
         /// <summary>
         /// Number of bytes currently in use by stream from the small pool
         /// </summary>
-        public long SmallPoolInUseSize => this.smallPoolInUseSize;
+        public long SmallPoolInUseSize => smallPoolInUseSize;
 
         /// <summary>
         /// Number of bytes in large pool not currently in use
@@ -211,7 +218,7 @@ namespace WebSocketSharp.Memory
             get
             {
                 long sum = 0;
-                foreach (long freeSize in this.largeBufferFreeSize)
+                foreach (long freeSize in _largeBufferFreeSize)
                 {
                     sum += freeSize;
                 }
@@ -228,7 +235,7 @@ namespace WebSocketSharp.Memory
             get
             {
                 long sum = 0;
-                foreach (long inUseSize in this.largeBufferInUseSize)
+                foreach (long inUseSize in _largeBufferInUseSize)
                 {
                     sum += inUseSize;
                 }
@@ -240,7 +247,7 @@ namespace WebSocketSharp.Memory
         /// <summary>
         /// How many blocks are in the small pool
         /// </summary>
-        public long SmallBlocksFree => this.smallPool.Count;
+        public long SmallBlocksFree => _smallPool.Count;
 
         /// <summary>
         /// How many buffers are in the large pool
@@ -250,7 +257,7 @@ namespace WebSocketSharp.Memory
             get
             {
                 long free = 0;
-                foreach (var pool in this.largePools)
+                foreach (var pool in _largePools)
                 {
                     free += pool.Count;
                 }
@@ -291,7 +298,32 @@ namespace WebSocketSharp.Memory
         /// retrieved from a stream which is subsequently modified is not used after modification (as it may no longer
         /// be valid).
         /// </summary>
-        public bool AggressiveBufferReturn { get; set; }
+        public bool AggressiveBufferReturn { get; set; } = true;
+
+        [ThreadStatic]
+        private char[] _charBlock;
+
+        /// <summary>
+        /// Removes and returns a thread-static char block.
+        /// </summary>
+        public char[] GetCharBlock()
+        {
+            if (_charBlock == null)
+                return new char[DefaultCharBlockSize];
+
+            char[] block = _charBlock;
+            _charBlock = null;
+            return block;
+        }
+
+        /// <summary>
+        /// Returns the thread-static char block.
+        /// </summary>
+        /// <param name="block"></param>
+        public void ReturnBlock(char[] block)
+        {
+            _charBlock = block ?? throw new ArgumentNullException(nameof(block));
+        }
 
         /// <summary>
         /// Removes and returns a single block from the pool.
@@ -299,20 +331,20 @@ namespace WebSocketSharp.Memory
         /// <returns>A byte[] array</returns>
         public byte[] GetBlock()
         {
-            if (!this.smallPool.TryPop(out byte[] block))
+            if (!_smallPool.TryPop(out byte[] block))
             {
                 // We'll add this back to the pool when the stream is disposed
                 // (unless our free pool is too large)
-                block = new byte[this.BlockSize];
-                Events.Writer.MemoryStreamNewBlockCreated(this.smallPoolInUseSize);
+                block = new byte[BlockSize];
+                Events.Writer.MemoryStreamNewBlockCreated(smallPoolInUseSize);
                 ReportBlockCreated();
             }
             else
             {
-                Interlocked.Add(ref this.smallPoolFreeSize, -this.BlockSize);
+                Interlocked.Add(ref smallPoolFreeSize, -BlockSize);
             }
 
-            Interlocked.Add(ref this.smallPoolInUseSize, this.BlockSize);
+            Interlocked.Add(ref smallPoolInUseSize, BlockSize);
             return block;
         }
 
@@ -325,23 +357,23 @@ namespace WebSocketSharp.Memory
         /// <returns>A buffer of at least the required size.</returns>
         internal byte[] GetLargeBuffer(int requiredSize, string tag)
         {
-            requiredSize = this.RoundToLargeBufferSize(requiredSize);
+            requiredSize = RoundToLargeBufferSize(requiredSize);
 
-            var poolIndex = this.GetPoolIndex(requiredSize);
+            var poolIndex = GetPoolIndex(requiredSize);
 
             byte[] buffer;
-            if (poolIndex < this.largePools.Length)
+            if (poolIndex < _largePools.Length)
             {
-                if (!this.largePools[poolIndex].TryPop(out buffer))
+                if (!_largePools[poolIndex].TryPop(out buffer))
                 {
                     buffer = new byte[requiredSize];
 
-                    Events.Writer.MemoryStreamNewLargeBufferCreated(requiredSize, this.LargePoolInUseSize);
+                    Events.Writer.MemoryStreamNewLargeBufferCreated(requiredSize, LargePoolInUseSize);
                     ReportLargeBufferCreated();
                 }
                 else
                 {
-                    Interlocked.Add(ref this.largeBufferFreeSize[poolIndex], -buffer.Length);
+                    Interlocked.Add(ref _largeBufferFreeSize[poolIndex], -buffer.Length);
                 }
             }
             else
@@ -350,12 +382,12 @@ namespace WebSocketSharp.Memory
 
                 // We still want to track the size, though, and we've reserved a slot
                 // in the end of the inuse array for nonpooled bytes in use.
-                poolIndex = this.largeBufferInUseSize.Length - 1;
+                poolIndex = _largeBufferInUseSize.Length - 1;
 
                 // We still want to round up to reduce heap fragmentation.
                 buffer = new byte[requiredSize];
                 string callStack = null;
-                if (this.GenerateCallStacks)
+                if (GenerateCallStacks)
                 {
                     // Grab the stack -- we want to know who requires such large buffers
                     callStack = Environment.StackTrace;
@@ -364,41 +396,41 @@ namespace WebSocketSharp.Memory
                 ReportLargeBufferCreated();
             }
 
-            Interlocked.Add(ref this.largeBufferInUseSize[poolIndex], buffer.Length);
+            Interlocked.Add(ref _largeBufferInUseSize[poolIndex], buffer.Length);
 
             return buffer;
         }
 
         private int RoundToLargeBufferSize(int requiredSize)
         {
-            if (this.useExponentialLargeBuffer)
+            if (useExponentialLargeBuffer)
             {
                 int pow = 1;
-                while (this.largeBufferMultiple * pow < requiredSize)
+                while (largeBufferMultiple * pow < requiredSize)
                 {
                     pow <<= 1;
                 }
-                return this.largeBufferMultiple * pow;
+                return largeBufferMultiple * pow;
             }
             else
             {
-                return ((requiredSize + this.LargeBufferMultiple - 1) / this.LargeBufferMultiple) * this.LargeBufferMultiple;
+                return ((requiredSize + LargeBufferMultiple - 1) / LargeBufferMultiple) * LargeBufferMultiple;
             }
         }
 
         private bool IsLargeBufferSize(int value)
         {
-            return (value != 0) && (this.useExponentialLargeBuffer
+            return (value != 0) && (useExponentialLargeBuffer
                                         ? (value == RoundToLargeBufferSize(value))
-                                        : (value % this.LargeBufferMultiple) == 0);
+                                        : (value % LargeBufferMultiple) == 0);
         }
 
         private int GetPoolIndex(int length)
         {
-            if (this.useExponentialLargeBuffer)
+            if (useExponentialLargeBuffer)
             {
                 int index = 0;
-                while ((this.largeBufferMultiple << index) < length)
+                while ((largeBufferMultiple << index) < length)
                 {
                     ++index;
                 }
@@ -406,7 +438,7 @@ namespace WebSocketSharp.Memory
             }
             else
             {
-                return length / this.largeBufferMultiple - 1;
+                return length / largeBufferMultiple - 1;
             }
         }
 
@@ -422,22 +454,22 @@ namespace WebSocketSharp.Memory
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));
             
-            if (!this.IsLargeBufferSize(buffer.Length))
+            if (!IsLargeBufferSize(buffer.Length))
             {
                 throw new ArgumentException(
                     String.Format("buffer did not originate from this memory manager. The size is not {0} of ",
-                                  this.useExponentialLargeBuffer ? "an exponential" : "a multiple") +
-                    this.largeBufferMultiple);
+                                  useExponentialLargeBuffer ? "an exponential" : "a multiple") +
+                    largeBufferMultiple);
             }
 
-            int poolIndex = this.GetPoolIndex(buffer.Length);
-            if (poolIndex < this.largePools.Length)
+            int poolIndex = GetPoolIndex(buffer.Length);
+            if (poolIndex < _largePools.Length)
             {
-                if ((this.largePools[poolIndex].Count + 1) * buffer.Length <= this.MaximumFreeLargePoolBytes ||
-                    this.MaximumFreeLargePoolBytes == 0)
+                if ((_largePools[poolIndex].Count + 1) * buffer.Length <= MaximumFreeLargePoolBytes ||
+                    MaximumFreeLargePoolBytes == 0)
                 {
-                    this.largePools[poolIndex].Push(buffer);
-                    Interlocked.Add(ref this.largeBufferFreeSize[poolIndex], buffer.Length);
+                    _largePools[poolIndex].Push(buffer);
+                    Interlocked.Add(ref _largeBufferFreeSize[poolIndex], buffer.Length);
                 }
                 else
                 {
@@ -451,7 +483,7 @@ namespace WebSocketSharp.Memory
             {
                 // This is a non-poolable buffer, but we still want to track its size for inuse
                 // analysis. We have space in the inuse array for this.
-                poolIndex = this.largeBufferInUseSize.Length - 1;
+                poolIndex = _largeBufferInUseSize.Length - 1;
 
                 Events.Writer.MemoryStreamDiscardBuffer(
                     Events.MemoryStreamBufferType.Large, tag,
@@ -459,28 +491,28 @@ namespace WebSocketSharp.Memory
                 ReportLargeBufferDiscarded(Events.MemoryStreamDiscardReason.TooLarge);
             }
 
-            Interlocked.Add(ref this.largeBufferInUseSize[poolIndex], -buffer.Length);
+            Interlocked.Add(ref _largeBufferInUseSize[poolIndex], -buffer.Length);
 
             ReportUsageReport(
-                this.smallPoolInUseSize, this.smallPoolFreeSize, 
-                this.LargePoolInUseSize, this.LargePoolFreeSize);
+                smallPoolInUseSize, smallPoolFreeSize, 
+                LargePoolInUseSize, LargePoolFreeSize);
         }
 
         public void ReturnBlock(byte[] block, string tag = null)
         {
             if (block == null)
-                return;
+                throw new ArgumentNullException(nameof(block));
 
-            if (block.Length != this.BlockSize)
+            if (block.Length != BlockSize)
                 throw new ArgumentException("Block is not BlockSize in length.");
 
-            Interlocked.Add(ref this.smallPoolInUseSize, -block.Length);
+            Interlocked.Add(ref smallPoolInUseSize, -block.Length);
 
-            if (this.MaximumFreeSmallPoolBytes == 0 ||
-                this.SmallPoolFreeSize < this.MaximumFreeSmallPoolBytes)
+            if (MaximumFreeSmallPoolBytes == 0 ||
+                SmallPoolFreeSize < MaximumFreeSmallPoolBytes)
             {
-                Interlocked.Add(ref this.smallPoolFreeSize, this.BlockSize);
-                this.smallPool.Push(block);
+                Interlocked.Add(ref smallPoolFreeSize, BlockSize);
+                _smallPool.Push(block);
             }
             else
             {
@@ -504,18 +536,18 @@ namespace WebSocketSharp.Memory
             if (blocks == null)
                 throw new ArgumentNullException(nameof(blocks));
 
-            var bytesToReturn = blocks.Count * this.BlockSize;
-            Interlocked.Add(ref this.smallPoolInUseSize, -bytesToReturn);
+            var bytesToReturn = blocks.Count * BlockSize;
+            Interlocked.Add(ref smallPoolInUseSize, -bytesToReturn);
 
             bool Body(byte[] block)
             {
-                if (block == null || block.Length != this.BlockSize)
+                if (block == null || block.Length != BlockSize)
                     return true; //throw new ArgumentException("blocks contains buffers that are not BlockSize in length");
 
-                if (this.MaximumFreeSmallPoolBytes == 0 || this.SmallPoolFreeSize < this.MaximumFreeSmallPoolBytes)
+                if (MaximumFreeSmallPoolBytes == 0 || SmallPoolFreeSize < MaximumFreeSmallPoolBytes)
                 {
-                    Interlocked.Add(ref this.smallPoolFreeSize, this.BlockSize);
-                    this.smallPool.Push(block);
+                    Interlocked.Add(ref smallPoolFreeSize, BlockSize);
+                    _smallPool.Push(block);
                     return true;
                 }
                 else
@@ -543,96 +575,178 @@ namespace WebSocketSharp.Memory
             }
 
             ReportUsageReport(
-                this.smallPoolInUseSize, this.smallPoolFreeSize,
-                this.LargePoolInUseSize, this.LargePoolFreeSize);
+                smallPoolInUseSize, smallPoolFreeSize,
+                LargePoolInUseSize, LargePoolFreeSize);
         }
 
         internal void ReportBlockCreated()
         {
-            this.BlockCreated?.Invoke();
+            BlockCreated?.Invoke();
         }
 
         internal void ReportBlockDiscarded()
         {
-            this.BlockDiscarded?.Invoke();
+            BlockDiscarded?.Invoke();
         }
 
         internal void ReportLargeBufferCreated()
         {
-            this.LargeBufferCreated?.Invoke();
+            LargeBufferCreated?.Invoke();
         }
 
         internal void ReportLargeBufferDiscarded(Events.MemoryStreamDiscardReason reason)
         {
-            this.LargeBufferDiscarded?.Invoke(reason);
+            LargeBufferDiscarded?.Invoke(reason);
         }
 
         internal void ReportStreamCreated()
         {
-            this.StreamCreated?.Invoke();
+            StreamCreated?.Invoke();
         }
 
         internal void ReportStreamDisposed()
         {
-            this.StreamDisposed?.Invoke();
+            StreamDisposed?.Invoke();
         }
 
         internal void ReportStreamFinalized()
         {
-            this.StreamFinalized?.Invoke();
+            StreamFinalized?.Invoke();
         }
 
         internal void ReportStreamLength(long bytes)
         {
-            this.StreamLength?.Invoke(bytes);
+            StreamLength?.Invoke(bytes);
         }
 
         internal void ReportStreamToArray()
         {
-            this.StreamConvertedToArray?.Invoke();
+            StreamConvertedToArray?.Invoke();
         }
 
         internal void ReportUsageReport(
             long smallPoolInUseBytes, long smallPoolFreeBytes,
             long largePoolInUseBytes, long largePoolFreeBytes)
         {
-            this.UsageReport?.Invoke(
+            UsageReport?.Invoke(
                 smallPoolInUseBytes, smallPoolFreeBytes,
                 largePoolInUseBytes, largePoolFreeBytes);
         }
 
+        #region Getters
+
+        public List<byte[]> GetArrayList()
+        {
+            lock (_arrayListPool)
+            {
+                if (_arrayListPool.Count > 0)
+                    return _arrayListPool.Pop();
+            }
+            return new List<byte[]>();
+        }
+
+        public void ReturnArrayList(List<byte[]> list)
+        {
+            if (list == null)
+                throw new ArgumentNullException(nameof(list));
+
+            lock (_arrayListPool)
+            {
+                if (_arrayListPool.Count < 1024)
+                {
+                    list.Clear();
+                    _arrayListPool.Push(list);
+                }
+            }
+        }
+
+        public StreamReader GetReader(ReadOnlySpan<byte> data)
+        {
+            StreamReader reader = null;
+            lock (_streamReaderPool)
+            {
+                if (_streamReaderPool.Count > 0)
+                    reader = _streamReaderPool.Pop();
+            }
+
+            if(reader == null)
+                reader = new StreamReader(GetStream());
+
+            var bs = reader.BaseStream as RecyclableMemoryStream;
+            bs.Position = 0;
+
+            if (!data.IsEmpty)
+            {
+                bs.Write(data);
+                bs.SetLength(data.Length);
+                bs.Position = 0;
+            }
+
+            reader.DiscardBufferedData();
+            return reader;
+        }
+
+        public void ReturnReader(StreamReader reader)
+        {
+            if (reader == null)
+                throw new ArgumentNullException(nameof(reader));
+
+            if (reader.BaseStream is RecyclableMemoryStream rs)
+            {
+                if (rs.IsDisposed)
+                    throw new ArgumentException(nameof(reader), "The underlying stream is disposed.");
+
+                lock (_streamReaderPool)
+                {
+                    if (_streamReaderPool.Count < 64)
+                    {
+                        _streamReaderPool.Push(reader);
+                        return;
+                    }
+                }
+
+                // dispose if it didn't fit in the pool
+                reader.Dispose();
+            }
+            else
+            {
+                throw new ArgumentException(
+                    $"The base stream of the reader is not of type {nameof(RecyclableMemoryStream)}.");
+            }
+        }
+
         /// <summary>
-        /// Retrieve a new MemoryStream object with no tag and a default initial capacity.
+        /// Retrieve a new stream with no tag and a default initial capacity.
         /// </summary>
         /// <returns>A MemoryStream.</returns>
-        public MemoryStream GetStream()
+        public RecyclableMemoryStream GetStream()
         {
             return new RecyclableMemoryStream(this);
         }
 
         /// <summary>
-        /// Retrieve a new MemoryStream object with the given tag and a default initial capacity.
+        /// Retrieve a new stream with the given tag and a default initial capacity.
         /// </summary>
         /// <param name="tag">A tag which can be used to track the source of the stream.</param>
         /// <returns>A MemoryStream.</returns>
-        public MemoryStream GetStream(string tag)
+        public RecyclableMemoryStream GetStream(string tag)
         {
             return new RecyclableMemoryStream(this, tag);
         }
 
         /// <summary>
-        /// Retrieve a new MemoryStream object with the given tag and at least the given capacity.
+        /// Retrieve a new stream with the given tag and at least the given capacity.
         /// </summary>
         /// <param name="tag">A tag which can be used to track the source of the stream.</param>
         /// <param name="requiredSize">The minimum desired capacity for the stream.</param>
         /// <returns>A MemoryStream.</returns>
-        public MemoryStream GetStream(int requiredSize, string tag = null)
+        public RecyclableMemoryStream GetStream(int requiredSize, string tag = null)
         {
             return new RecyclableMemoryStream(this, tag, requiredSize);
         }
 
         /// <summary>
-        /// Retrieve a new MemoryStream object with the given tag and at least the given capacity, possibly using
+        /// Retrieve a new stream with the given tag and at least the given capacity, possibly using
         /// a single continugous underlying buffer.
         /// </summary>
         /// <remarks>Retrieving a MemoryStream which provides a single contiguous buffer can be useful in situations
@@ -643,16 +757,16 @@ namespace WebSocketSharp.Memory
         /// <param name="requiredSize">The minimum desired capacity for the stream.</param>
         /// <param name="asContiguousBuffer">Whether to attempt to use a single contiguous buffer.</param>
         /// <returns>A MemoryStream.</returns>
-        public MemoryStream GetStream(int requiredSize, bool asContiguousBuffer, string tag = null)
+        public RecyclableMemoryStream GetStream(int requiredSize, bool asContiguousBuffer, string tag = null)
         {
-            if (!asContiguousBuffer || requiredSize <= this.BlockSize)
-                return this.GetStream(requiredSize, tag);
+            if (!asContiguousBuffer || requiredSize <= BlockSize)
+                return GetStream(requiredSize, tag);
 
-            return new RecyclableMemoryStream(this, tag, requiredSize, this.GetLargeBuffer(requiredSize, tag));
+            return new RecyclableMemoryStream(this, tag, requiredSize, GetLargeBuffer(requiredSize, tag));
         }
 
         /// <summary>
-        /// Retrieve a new MemoryStream object with the given tag and with contents copied from the provided
+        /// Retrieve a new stream with the given tag and with contents copied from the provided
         /// buffer. The provided buffer is not wrapped or used after construction.
         /// </summary>
         /// <remarks>The new stream's position is set to the beginning of the stream when returned.</remarks>
@@ -661,12 +775,11 @@ namespace WebSocketSharp.Memory
         /// <param name="offset">The offset from the start of the buffer to copy from.</param>
         /// <param name="count">The number of bytes to copy from the buffer.</param>
         /// <returns>A MemoryStream.</returns>
-        public MemoryStream GetStream(byte[] buffer, int offset, int count, string tag = null)
+        public RecyclableMemoryStream GetStream(byte[] buffer, int offset, int count, string tag = null)
         {
-            RecyclableMemoryStream stream = null;
+            var stream = new RecyclableMemoryStream(this, tag, count);
             try
             {
-                stream = new RecyclableMemoryStream(this, tag, count);
                 stream.Write(buffer, offset, count);
                 stream.Position = 0;
                 return stream;
@@ -678,10 +791,11 @@ namespace WebSocketSharp.Memory
             }
         }
 
-        public MemoryStream GetStream(byte[] buffer, string tag = null)
+        public RecyclableMemoryStream GetStream(byte[] buffer, string tag = null)
         {
             return GetStream(buffer, 0, buffer.Length, tag);
         }
+        #endregion
 
         /// <summary>
         /// Triggered when a new block is created.
@@ -734,3 +848,12 @@ namespace WebSocketSharp.Memory
         public event UsageReportEventHandler UsageReport;
     }
 }
+
+//System.Exception: hur är den clen
+//  at WebSocketSharp.Memory.RecyclableMemoryManager.ReturnPooledStream(PooledRecyclableMemoryStream stream) in D:\Repositories\WebGame\ThirdParty\websocket-sharp\websocket-sharp\Memory\RecyclableMemoryManager.cs:line 541
+//  at WebSocketSharp.Memory.PooledRecyclableMemoryStream.Dispose(Boolean disposing) in D:\Repositories\WebGame\ThirdParty\websocket-sharp\websocket-sharp\Memory\PooledRecyclableMemoryStream.cs:line 19
+//  at WebSocketSharp.Memory.RecyclableMemoryStream.Close() in D:\Repositories\WebGame\ThirdParty\websocket-sharp\websocket-sharp\Memory\RecyclableMemoryStream.cs:line 241                                                                                                                                                                                                                         at WebSocketSharp.Server.AttributedWebSocketBehavior.SendAsJson(String key, Object body, JsonSerializer serializer) in D:\Repositories\WebGame\ThirdParty\websocket-sharp\websocket-sharp\Server\AttributedWebSocketBehavior.cs:line 170                                                                                                                                                        at WebSocketSharp.Server.AttributedWebSocketBehavior.SendAsJson(String key, Object body) in D:\Repositories\WebGame\ThirdParty\websocket-sharp\websocket-sharp\Server\AttributedWebSocketBehavior.cs:line 175
+//  at WebGameServer.GameBehavior.Ping(JToken body) in D:\Repositories\WebGame\Source\WebGameServer\GameBehavior.cs:line 17                                                                         at WebSocketSharp.Server.AttributedWebSocketBehavior.OnMessage(MessageEventArgs e) in D:\Repositories\WebGame\ThirdParty\websocket-sharp\websocket-sharp\Server\AttributedWebSocketBehavior.cs:line 146
+//  at WebSocketSharp.Server.WebSocketBehavior.OnMessage(Object sender, MessageEventArgs e) in D:\Repositories\WebGame\ThirdParty\websocket-sharp\websocket-sharp\Server\WebSocketBehavior.cs:line 408
+//  at WebSocketSharp.Ext.Emit[TEventArgs](EventHandler`1 eventHandler, Object sender, TEventArgs e) in D:\Repositories\WebGame\ThirdParty\websocket-sharp\websocket-sharp\Ext.cs:line 1131
+//  at WebSocketSharp.WebSocket.MessageS(MessageEventArgs e) in D:\Repositories\WebGame\ThirdParty\websocket-sharp\websocket-sharp\WebSocket.cs:line 1422              An error has occurred during an OnMessage event.

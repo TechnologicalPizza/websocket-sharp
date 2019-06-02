@@ -42,8 +42,10 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using WebSocketSharp.Memory;
 
 namespace WebSocketSharp.Net
 {
@@ -121,7 +123,7 @@ namespace WebSocketSharp.Net
         {
             get
             {
-                var val = _headers["Accept"];
+                string val = _headers["Accept"];
                 if (val == null)
                     return null;
 
@@ -129,8 +131,7 @@ namespace WebSocketSharp.Net
                 {
                     _acceptTypes = val
                                    .SplitHeaderValue(',')
-                                   .Trim()
-                                   .ToList()
+                                   .TrimAll()
                                    .ToArray();
                 }
 
@@ -237,9 +238,9 @@ namespace WebSocketSharp.Net
         /// Gets the headers included in the request.
         /// </summary>
         /// <value>
-        /// A <see cref="NameValueCollection"/> that contains the headers.
+        /// A <see cref="WebHeaderCollection"/> that contains the headers.
         /// </value>
-        public NameValueCollection Headers => _headers;
+        public WebHeaderCollection Headers => _headers;
 
         /// <summary>
         /// Gets the HTTP method specified by the client.
@@ -515,7 +516,7 @@ namespace WebSocketSharp.Net
                     return null;
 
                 if (_userLanguages == null)
-                    _userLanguages = val.Split(',').Trim().ToList().ToArray();
+                    _userLanguages = val.Split(',').TrimAll().ToArray();
 
                 return _userLanguages;
             }
@@ -572,7 +573,7 @@ namespace WebSocketSharp.Net
 
         #region Internal Methods
 
-        internal void AddHeader(string headerField)
+        internal void AddHeader(ReadOnlySpan<char> headerField)
         {
             var start = headerField[0];
             if (start == ' ' || start == '\t')
@@ -588,7 +589,7 @@ namespace WebSocketSharp.Net
                 return;
             }
 
-            var name = headerField.Substring(0, colon).Trim();
+            var name = headerField.Slice(0, colon).Trim();
             if (name.Length == 0 || !name.IsToken())
             {
                 _context.ErrorMessage = "Invalid header name";
@@ -596,13 +597,12 @@ namespace WebSocketSharp.Net
             }
 
             var val = colon < headerField.Length - 1
-                      ? headerField.Substring(colon + 1).Trim()
+                      ? headerField.Slice(colon + 1).Trim().ToString()
                       : string.Empty;
 
-            _headers.InternalSet(name, val, false);
+            _headers.InternalSet(name.ToString(), val, false);
 
-            var lower = name.ToLower(CultureInfo.InvariantCulture);
-            if (lower == "host")
+            if (name.Equals("host".AsSpan(), StringComparison.InvariantCultureIgnoreCase))
             {
                 if (_userHostName != null)
                 {
@@ -620,7 +620,7 @@ namespace WebSocketSharp.Net
                 return;
             }
 
-            if (lower == "content-length")
+            if (name.Equals("content-length".AsSpan(), StringComparison.InvariantCultureIgnoreCase))
             {
                 if (_contentLength > -1)
                 {
@@ -706,31 +706,37 @@ namespace WebSocketSharp.Net
             if (input == Stream.Null)
                 return true;
 
-            var len = 2048;
+            int len = 2048;
             if (_contentLength > 0 && _contentLength < len)
                 len = (int)_contentLength;
 
-            var buff = new byte[len];
-
-            while (true)
+            byte[] buff = RecyclableMemoryManager.Shared.GetBlock();
+            try
             {
-                try
+                while (true)
                 {
-                    var ares = input.BeginRead(buff, 0, len, null, null);
-                    if (!ares.IsCompleted)
+                    try
                     {
-                        var timeout = 100;
-                        if (!ares.AsyncWaitHandle.WaitOne(timeout))
-                            return false;
-                    }
+                        var result = input.BeginRead(buff, 0, len, null, null);
+                        if (!result.IsCompleted)
+                        {
+                            int timeout = 100;
+                            if (!result.AsyncWaitHandle.WaitOne(timeout))
+                                return false;
+                        }
 
-                    if (input.EndRead(ares) <= 0)
-                        return true;
+                        if (input.EndRead(result) <= 0)
+                            return true;
+                    }
+                    catch
+                    {
+                        return false;
+                    }
                 }
-                catch
-                {
-                    return false;
-                }
+            }
+            finally
+            {
+                RecyclableMemoryManager.Shared.ReturnBlock(buff);
             }
         }
 
@@ -803,50 +809,6 @@ namespace WebSocketSharp.Net
         #region Public Methods
 
         /// <summary>
-        /// Begins getting the certificate provided by the client asynchronously.
-        /// </summary>
-        /// <returns>
-        /// An <see cref="IAsyncResult"/> instance that indicates the status of the
-        /// operation.
-        /// </returns>
-        /// <param name="requestCallback">
-        /// An <see cref="AsyncCallback"/> delegate that invokes the method called
-        /// when the operation is complete.
-        /// </param>
-        /// <param name="state">
-        /// An <see cref="object"/> that represents a user defined object to pass to
-        /// the callback delegate.
-        /// </param>
-        /// <exception cref="NotSupportedException">
-        /// This method is not supported.
-        /// </exception>
-        public IAsyncResult BeginGetClientCertificate(
-            AsyncCallback requestCallback, object state)
-        {
-            throw new NotSupportedException();
-        }
-
-        /// <summary>
-        /// Ends an asynchronous operation to get the certificate provided by the
-        /// client.
-        /// </summary>
-        /// <returns>
-        /// A <see cref="X509Certificate2"/> that represents an X.509 certificate
-        /// provided by the client.
-        /// </returns>
-        /// <param name="asyncResult">
-        /// An <see cref="IAsyncResult"/> instance returned when the operation
-        /// started.
-        /// </param>
-        /// <exception cref="NotSupportedException">
-        /// This method is not supported.
-        /// </exception>
-        public X509Certificate2 EndGetClientCertificate(IAsyncResult asyncResult)
-        {
-            throw new NotSupportedException();
-        }
-
-        /// <summary>
         /// Gets the certificate provided by the client.
         /// </summary>
         /// <returns>
@@ -872,11 +834,8 @@ namespace WebSocketSharp.Net
         {
             var buff = new StringBuilder(64);
 
-            buff
-            .AppendFormat(
-              "{0} {1} HTTP/{2}\r\n", _httpMethod, _rawUrl, _protocolVersion
-            )
-            .Append(_headers.ToString());
+            buff.AppendFormat("{0} {1} HTTP/{2}\r\n", _httpMethod, _rawUrl, _protocolVersion);
+            buff.Append(_headers.ToString());
 
             return buff.ToString();
         }

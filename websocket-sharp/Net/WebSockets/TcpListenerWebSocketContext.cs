@@ -367,8 +367,8 @@ namespace WebSocketSharp.Net.WebSockets
         private HttpRequest SendAuthenticationChallenge(string challenge)
         {
             var res = HttpResponse.CreateUnauthorizedResponse(challenge);
-            var bytes = res.ToByteArray();
-            _stream.Write(bytes, 0, bytes.Length);
+            using(var tmp = res.ToMemory())
+                tmp.CopyBytesTo(_stream);
 
             return HttpRequest.Read(_stream, 15000);
         }
@@ -420,8 +420,8 @@ namespace WebSocketSharp.Net.WebSockets
         internal void Close(HttpStatusCode code)
         {
             var res = HttpResponse.CreateCloseResponse(code);
-            byte[] bytes = res.ToByteArray();
-            _stream.Write(bytes, 0, bytes.Length);
+            using (var tmp = res.ToMemory())
+                tmp.CopyBytesTo(_stream);
 
             _stream.Close();
             _tcpClient.Close();

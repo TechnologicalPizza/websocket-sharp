@@ -52,20 +52,19 @@ namespace WebSocketSharp.Server
     ///   like to get the response data to return to the client.
     ///   </para>
     /// </remarks>
-    public class HttpRequestEventArgs : EventArgs
+    public readonly struct HttpRequestEvent
     {
         #region Private Fields
 
-        private HttpListenerContext _context;
-        private string _docRootPath;
+        private readonly HttpListenerContext _context;
+        private readonly string _docRootPath;
 
         #endregion
 
         #region Internal Constructors
 
-        internal HttpRequestEventArgs(
-          HttpListenerContext context, string documentRootPath
-        )
+        internal HttpRequestEvent(
+            HttpListenerContext context, string documentRootPath)
         {
             _context = context;
             _docRootPath = documentRootPath;

@@ -120,7 +120,7 @@ namespace WebSocketSharp.Net
         /// </summary>
         internal Cookie()
         {
-            init(string.Empty, string.Empty, string.Empty, string.Empty);
+            Init(string.Empty, string.Empty, string.Empty, string.Empty);
         }
 
         #endregion
@@ -295,7 +295,7 @@ namespace WebSocketSharp.Net
                 throw new ArgumentException(msg, "name");
             }
 
-            if (!name.IsToken())
+            if (!name.AsSpan().IsToken())
             {
                 var msg = "It contains an invalid character.";
                 throw new ArgumentException(msg, "name");
@@ -313,7 +313,7 @@ namespace WebSocketSharp.Net
                 }
             }
 
-            init(name, value, path ?? string.Empty, domain ?? string.Empty);
+            Init(name, value, path ?? string.Empty, domain ?? string.Empty);
         }
 
         #endregion
@@ -540,7 +540,7 @@ namespace WebSocketSharp.Net
                     throw new ArgumentException(msg, "value");
                 }
 
-                if (!value.IsToken())
+                if (!value.AsSpan().IsToken())
                 {
                     var msg = "It contains an invalid character.";
                     throw new ArgumentException(msg, "value");
@@ -591,7 +591,7 @@ namespace WebSocketSharp.Net
                     throw new ArgumentException(msg, "value");
                 }
 
-                if (!tryCreatePorts(value, out int[] ports))
+                if (!TryCreatePorts(value, out int[] ports))
                 {
                     var msg = "It could not be parsed.";
                     throw new ArgumentException(msg, "value");
@@ -702,7 +702,7 @@ namespace WebSocketSharp.Net
 
         #region Private Methods
 
-        private static int hash(int i, int j, int k, int l, int m)
+        private static int Hash(int i, int j, int k, int l, int m)
         {
             return i
                    ^ (j << 13 | j >> 19)
@@ -711,7 +711,7 @@ namespace WebSocketSharp.Net
                    ^ (m << 20 | m >> 12);
         }
 
-        private void init(string name, string value, string path, string domain)
+        private void Init(string name, string value, string path, string domain)
         {
             _name = name;
             _value = value;
@@ -722,7 +722,7 @@ namespace WebSocketSharp.Net
             _timeStamp = DateTime.Now;
         }
 
-        private string toResponseStringVersion0()
+        private string ToResponseStringVersion0()
         {
             var buff = new StringBuilder(64);
 
@@ -754,7 +754,7 @@ namespace WebSocketSharp.Net
             return buff.ToString();
         }
 
-        private string toResponseStringVersion1()
+        private string ToResponseStringVersion1()
         {
             var buff = new StringBuilder(64);
 
@@ -778,14 +778,13 @@ namespace WebSocketSharp.Net
             }
 
             if (_comment != null)
-                buff.AppendFormat("; Comment={0}", HttpUtility.UrlEncode(_comment));
+                buff.AppendFormat("; Comment={0}", HttpUtility.UrlEncode(_comment, Encoding.UTF8));
 
             if (_commentUri != null)
             {
                 var url = _commentUri.OriginalString;
                 buff.AppendFormat(
-                  "; CommentURL={0}", !url.IsToken() ? url.Quote() : url
-                );
+                  "; CommentURL={0}", !url.AsSpan().IsToken() ? url.Quote() : url);
             }
 
             if (_discard)
@@ -797,7 +796,7 @@ namespace WebSocketSharp.Net
             return buff.ToString();
         }
 
-        private static bool tryCreatePorts(string value, out int[] result)
+        private static bool TryCreatePorts(string value, out int[] result)
         {
             result = null;
 
@@ -885,8 +884,8 @@ namespace WebSocketSharp.Net
             return _name.Length == 0
                    ? string.Empty
                    : _version == 0
-                     ? toResponseStringVersion0()
-                     : toResponseStringVersion1();
+                     ? ToResponseStringVersion0()
+                     : ToResponseStringVersion1();
         }
 
         #endregion
@@ -933,7 +932,7 @@ namespace WebSocketSharp.Net
         /// </returns>
         public override int GetHashCode()
         {
-            return hash(
+            return Hash(
                      StringComparer.InvariantCultureIgnoreCase.GetHashCode(_name),
                      _value.GetHashCode(),
                      _path.GetHashCode(),

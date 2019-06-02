@@ -429,7 +429,7 @@ namespace WebSocketSharp.Net
                     return;
                 }
 
-                if (!value.IsText() || value.IndexOfAny(StatusInvalidChars) > -1)
+                if (!value.AsSpan().IsText() || value.IndexOfAny(StatusInvalidChars) > -1)
                     throw new ArgumentException("Contains invalid characters.", "value");
 
                 _statusDescription = value;
@@ -445,12 +445,12 @@ namespace WebSocketSharp.Net
             if (_cookies == null || _cookies.Count == 0)
                 return true;
 
-            var found = FindCookie(cookie).ToList();
-            if (found.Count == 0)
+            var found = FindCookie(cookie);
+            if (found == null || found.Count == 0)
                 return true;
 
-            var ver = cookie.Version;
-            foreach (var c in found)
+            int ver = cookie.Version;
+            foreach (Cookie c in found)
                 if (c.Version == ver)
                     return true;
 
@@ -480,24 +480,34 @@ namespace WebSocketSharp.Net
             _context.Connection.Close(force);
         }
 
-        private IEnumerable<Cookie> FindCookie(Cookie cookie)
+        private List<Cookie> FindCookie(Cookie cookie)
         {
+            List<Cookie> list = null;
             var name = cookie.Name;
             var domain = cookie.Domain;
             var path = cookie.Path;
             if (_cookies != null)
+            {
                 foreach (Cookie c in _cookies)
+                {
                     if (c.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
                         c.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase) &&
                         c.Path.Equals(path, StringComparison.Ordinal))
-                        yield return c;
+                    {
+                        if (list == null)
+                            list = new List<Cookie>();
+                        list.Add(c);
+                    }
+                }
+            }
+            return list;
         }
 
         #endregion
 
         #region Internal Methods
 
-        internal WebHeaderCollection WriteHeadersTo(MemoryStream destination)
+        internal WebHeaderCollection WriteHeadersTo(Stream destination)
         {
             var headers = new WebHeaderCollection(HttpHeaderType.Response, true);
             if (_headers != null)
@@ -567,7 +577,7 @@ namespace WebSocketSharp.Net
                     headers.InternalSet("Set-Cookie", cookie.ToResponseString(), true);
 
             var enc = _contentEncoding ?? Encoding.Default;
-            var writer = new StreamWriter(destination, enc, 256);
+            var writer = new StreamWriter(destination, enc, 512);
             writer.Write("HTTP/{0} {1} {2}\r\n", _version, _statusCode, _statusDescription);
             writer.Write(headers.ToStringMultiValue(true));
             writer.Flush();

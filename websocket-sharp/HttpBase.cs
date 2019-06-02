@@ -27,16 +27,16 @@
 #endregion
 
 using System;
-using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
 using System.Text;
 using System.Threading;
+using WebSocketSharp.Memory;
 using WebSocketSharp.Net;
 
 namespace WebSocketSharp
 {
-    internal abstract class HttpBase
+    internal abstract class HttpBase : IDisposable
     {
         #region Private Fields
 
@@ -48,7 +48,7 @@ namespace WebSocketSharp
 
         #region Internal Fields
 
-        internal MemoryStream EntityBodyData;
+        internal RecyclableMemoryStream EntityBodyData;
 
         #endregion
 
@@ -80,14 +80,11 @@ namespace WebSocketSharp
                 if (EntityBodyData == null || EntityBodyData.Length == 0)
                     return string.Empty;
 
-                Encoding enc = null;
-
-                var contentType = _headers["Content-Type"];
-                if (contentType != null && contentType.Length > 0)
-                    enc = HttpUtility.GetEncoding(contentType);
+                Encoding enc = GetContentTypeEncoding();
 
                 string body;
-                using (var reader = new StreamReader(EntityBodyData, enc ?? Encoding.UTF8))
+                using (var reader = new StreamReader(
+                    EntityBodyData, enc ?? Encoding.UTF8, false, 1024, leaveOpen: true))
                     body = reader.ReadToEnd();
 
                 EntityBodyData.Position = 0;
@@ -95,11 +92,19 @@ namespace WebSocketSharp
             }
         }
 
+        public Encoding GetContentTypeEncoding()
+        {
+            var contentType = _headers["Content-Type"];
+            if (contentType != null && contentType.Length > 0)
+                return HttpUtility.GetEncoding(contentType);
+            return null;
+        }
+
         #endregion
 
         #region Private Methods
 
-        private static MemoryStream ReadEntityBody(Stream stream, string length)
+        private static RecyclableMemoryStream ReadEntityBody(Stream stream, string length)
         {
             if (!long.TryParse(length, out long len))
                 throw new ArgumentException("Cannot be parsed.", "length");
@@ -112,7 +117,7 @@ namespace WebSocketSharp
 
         private static string[] ReadHeaders(Stream stream, int maxLength)
         {
-            using (var tmp = new MemoryStream())
+            using (var tmp = RecyclableMemoryManager.Shared.GetStream())
             {
                 var cnt = 0;
                 void Add(int i)
@@ -140,7 +145,7 @@ namespace WebSocketSharp
                 if (!read)
                     throw new WebSocketException("The length of header part is greater than the max length.");
 
-                return Encoding.UTF8.GetString(tmp.ToArray())
+                return Encoding.UTF8.GetString(tmp.GetBuffer(), 0, (int)tmp.Length)
                        .Replace(CrLf + " ", " ")
                        .Replace(CrLf + "\t", " ")
                        .Split(new[] { CrLf }, StringSplitOptions.RemoveEmptyEntries);
@@ -151,25 +156,24 @@ namespace WebSocketSharp
 
         #region Protected Methods
 
-        protected static T Read<T>(Stream stream, Func<string[], T> parser, int millisecondsTimeout)
-          where T : HttpBase
+        protected static THttp Read<THttp>(
+            Stream stream, Func<string[], THttp> parser, int millisecondsTimeout)
+            where THttp : HttpBase
         {
             var timeout = false;
             var timer = new Timer(
-              state =>
-              {
-                  timeout = true;
-                  stream.Close();
-              },
-              null,
-              millisecondsTimeout,
-              -1);
+                state =>
+                {
+                    timeout = true;
+                    stream.Close();
+                },
+                null, millisecondsTimeout, -1);
 
-            T http = null;
+            THttp http = null;
             Exception exception = null;
             try
             {
-                http = parser(ReadHeaders(stream, _headersMaxLength));
+                http = parser.Invoke(ReadHeaders(stream, _headersMaxLength));
                 var contentLen = http.Headers["Content-Length"];
                 if (contentLen != null && contentLen.Length > 0)
                     http.EntityBodyData = ReadEntityBody(stream, contentLen);
@@ -196,13 +200,32 @@ namespace WebSocketSharp
             return http;
         }
 
+        protected void WriteEntityBody(TextWriter writer, Stream stream)
+        {
+            if (EntityBodyData != null && EntityBodyData.Length > 0)
+            {
+                Encoding e = GetContentTypeEncoding();
+                if (!ReferenceEquals(e, Encoding.UTF8))
+                {
+                    writer.Write(EntityBody);
+                    writer.Flush();
+                }
+                else
+                {
+                    EntityBodyData.CopyBytesTo(stream);
+                }
+            }
+        }
+
         #endregion
 
         #region Public Methods
 
-        public byte[] ToByteArray()
+        public abstract RecyclableMemoryStream ToMemory();
+
+        public void Dispose()
         {
-            return Encoding.UTF8.GetBytes(ToString());
+            EntityBodyData.Dispose();
         }
 
         #endregion

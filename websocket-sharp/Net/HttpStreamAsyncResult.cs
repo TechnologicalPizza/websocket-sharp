@@ -42,63 +42,67 @@ using System.Threading;
 
 namespace WebSocketSharp.Net
 {
-  internal class HttpStreamAsyncResult : IAsyncResult
-  {
-    #region Private Fields
-
-    private byte[]           _buffer;
-    private AsyncCallback    _callback;
-    private bool             _completed;
-    private int              _count;
-    private Exception        _exception;
-    private int              _offset;
-    private object           _state;
-    private object           _sync;
-    private int              _syncRead;
-    private ManualResetEvent _waitHandle;
-
-    #endregion
-
-    #region Internal Constructors
-
-    internal HttpStreamAsyncResult (AsyncCallback callback, object state)
+    internal class HttpStreamAsyncResult : IAsyncResult
     {
-      _callback = callback;
-      _state = state;
-      _sync = new object ();
-    }
+        #region Private Fields
 
-    #endregion
+        private byte[] _buffer;
+        private AsyncCallback _callback;
+        private bool _completed;
+        private int _count;
+        private Exception _exception;
+        private int _offset;
+        private object _state;
+        private object _sync;
+        private int _syncRead;
+        private ManualResetEvent _waitHandle;
 
-    #region Internal Properties
+        #endregion
 
-    internal byte[] Buffer {
-      get => _buffer;
+        #region Internal Constructors
 
-      set => _buffer = value;
-    }
+        internal HttpStreamAsyncResult(AsyncCallback callback, object state)
+        {
+            _callback = callback;
+            _state = state;
+            _sync = new object();
+        }
 
-        internal int Count {
-      get => _count;
+        #endregion
 
-      set => _count = value;
-    }
+        #region Internal Properties
+
+        internal byte[] Buffer
+        {
+            get => _buffer;
+
+            set => _buffer = value;
+        }
+
+        internal int Count
+        {
+            get => _count;
+
+            set => _count = value;
+        }
 
         internal Exception Exception => _exception;
 
         internal bool HasException => _exception != null;
 
-        internal int Offset {
-      get => _offset;
+        internal int Offset
+        {
+            get => _offset;
 
-      set => _offset = value;
-    }
+            set => _offset = value;
+        }
 
-        internal int SyncRead {
-      get => _syncRead;
+        internal int SyncRead
+        {
+            get => _syncRead;
 
-      set => _syncRead = value;
-    }
+            set => _syncRead = value;
+        }
 
         #endregion
 
@@ -106,47 +110,52 @@ namespace WebSocketSharp.Net
 
         public object AsyncState => _state;
 
-        public WaitHandle AsyncWaitHandle {
-      get {
-        lock (_sync)
-          return _waitHandle ?? (_waitHandle = new ManualResetEvent (_completed));
-      }
-    }
+        public WaitHandle AsyncWaitHandle
+        {
+            get
+            {
+                lock (_sync)
+                    return _waitHandle ?? (_waitHandle = new ManualResetEvent(_completed));
+            }
+        }
 
         public bool CompletedSynchronously => _syncRead == _count;
 
-        public bool IsCompleted {
-      get {
-        lock (_sync)
-          return _completed;
-      }
+        public bool IsCompleted
+        {
+            get
+            {
+                lock (_sync)
+                    return _completed;
+            }
+        }
+
+        #endregion
+
+        #region Internal Methods
+
+        internal void Complete()
+        {
+            lock (_sync)
+            {
+                if (_completed)
+                    return;
+
+                _completed = true;
+                if (_waitHandle != null)
+                    _waitHandle.Set();
+
+                if (_callback != null)
+                    _callback.BeginInvoke(this, ar => _callback.EndInvoke(ar), null);
+            }
+        }
+
+        internal void Complete(Exception exception)
+        {
+            _exception = exception;
+            Complete();
+        }
+
+        #endregion
     }
-
-    #endregion
-
-    #region Internal Methods
-
-    internal void Complete ()
-    {
-      lock (_sync) {
-        if (_completed)
-          return;
-
-        _completed = true;
-        if (_waitHandle != null)
-          _waitHandle.Set ();
-
-        if (_callback != null)
-          _callback.BeginInvoke (this, ar => _callback.EndInvoke (ar), null);
-      }
-    }
-
-    internal void Complete (Exception exception)
-    {
-      _exception = exception;
-      Complete ();
-    }
-
-    #endregion
-  }
 }

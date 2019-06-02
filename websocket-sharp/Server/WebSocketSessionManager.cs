@@ -34,6 +34,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Timers;
+using WebSocketSharp.Memory;
 
 namespace WebSocketSharp.Server
 {
@@ -87,7 +88,7 @@ namespace WebSocketSharp.Server
         #region Public Properties
 
         /// <summary>
-        /// Gets the IDs for the active sessions in the WebSocket service.
+        /// Gets the IDs for the active sessions in the service.
         /// </summary>
         /// <value>
         ///   <para>
@@ -111,7 +112,7 @@ namespace WebSocketSharp.Server
         }
 
         /// <summary>
-        /// Gets the number of the sessions in the WebSocket service.
+        /// Gets the number of the sessions in the service.
         /// </summary>
         /// <value>
         /// An <see cref="int"/> that represents the number of the sessions.
@@ -126,7 +127,7 @@ namespace WebSocketSharp.Server
         }
 
         /// <summary>
-        /// Gets the IDs for the sessions in the WebSocket service.
+        /// Gets the IDs for the sessions in the service.
         /// </summary>
         /// <value>
         ///   <para>
@@ -137,25 +138,22 @@ namespace WebSocketSharp.Server
         ///   the collection of the IDs for the sessions.
         ///   </para>
         /// </value>
-        public IEnumerable<string> IDs
+        public List<string> GetIDs()
         {
-            get
+            if (_state != ServerState.Start)
+                return null;
+
+            lock (_sync)
             {
                 if (_state != ServerState.Start)
-                    return Enumerable.Empty<string>();
+                    return null;
 
-                lock (_sync)
-                {
-                    if (_state != ServerState.Start)
-                        return Enumerable.Empty<string>();
-
-                    return _sessions.Keys.ToList();
-                }
+                return _sessions.Keys.ToList();
             }
         }
 
         /// <summary>
-        /// Gets the IDs for the inactive sessions in the WebSocket service.
+        /// Gets the IDs for the inactive sessions in the service.
         /// </summary>
         /// <value>
         ///   <para>
@@ -254,7 +252,7 @@ namespace WebSocketSharp.Server
         }
 
         /// <summary>
-        /// Gets the session instances in the WebSocket service.
+        /// Gets the session instances in the service.
         /// </summary>
         /// <value>
         ///   <para>
@@ -265,20 +263,17 @@ namespace WebSocketSharp.Server
         ///   the collection of the session instances.
         ///   </para>
         /// </value>
-        public IEnumerable<IWebSocketSession> Sessions
+        public List<IWebSocketSession> GetSessions()
         {
-            get
+            if (_state != ServerState.Start)
+                return null;
+
+            lock (_sync)
             {
                 if (_state != ServerState.Start)
-                    return Enumerable.Empty<IWebSocketSession>();
+                    return null;
 
-                lock (_sync)
-                {
-                    if (_state != ServerState.Start)
-                        return Enumerable.Empty<IWebSocketSession>();
-
-                    return _sessions.Values.ToList();
-                }
+                return _sessions.Values.ToList();
             }
         }
 
@@ -328,12 +323,14 @@ namespace WebSocketSharp.Server
 
         #region Private Methods
 
+        // TODO: reduce allocs
         private void Broadcast(Opcode opcode, byte[] data, Action completed)
         {
             var cache = new Dictionary<CompressionMethod, Stream>();
             try
             {
-                foreach (var session in Sessions)
+                var sessions = GetSessions();
+                foreach (var session in sessions)
                 {
                     if (_state != ServerState.Start)
                     {
@@ -356,12 +353,14 @@ namespace WebSocketSharp.Server
             }
         }
 
+        // TODO: reduce allocs
         private void Broadcast(Opcode opcode, Stream stream, Action completed)
         {
             var cache = new Dictionary<CompressionMethod, Stream>();
             try
             {
-                foreach (var session in Sessions)
+                var sessions = GetSessions();
+                foreach (var session in sessions)
                 {
                     if (_state != ServerState.Start)
                     {
@@ -398,10 +397,12 @@ namespace WebSocketSharp.Server
               state => Broadcast(opcode, stream, completed));
         }
 
+        // TODO: reduce allocs
         private Dictionary<string, bool> Broadping(byte[] frameAsBytes)
         {
             var ret = new Dictionary<string, bool>();
-            foreach (var session in Sessions)
+            var sessions = GetSessions();
+            foreach (var session in sessions)
             {
                 if (_state != ServerState.Start)
                 {
@@ -445,19 +446,26 @@ namespace WebSocketSharp.Server
 
         private void Stop(PayloadData payloadData, bool send)
         {
-            var bytes = send
-                        ? WebSocketFrame.CreateCloseFrame(payloadData, false).ToMemory()
-                        : null;
+            var bytes = send 
+                ? WebSocketFrame.CreateCloseFrame(payloadData, false).ToMemory()
+                : null;
 
-            lock (_sync)
+            try
             {
-                _state = ServerState.ShuttingDown;
+                lock (_sync)
+                {
+                    _state = ServerState.ShuttingDown;
 
-                _sweepTimer.Enabled = false;
-                foreach (var session in _sessions.Values.ToList())
-                    session.Context.WebSocket.Close(payloadData, bytes);
+                    _sweepTimer.Enabled = false;
+                    foreach (var session in _sessions.Values)
+                        session.Context.WebSocket.Close(payloadData, bytes);
 
-                _state = ServerState.Stop;
+                    _state = ServerState.Stop;
+                }
+            }
+            finally
+            {
+                bytes?.Dispose();
             }
         }
 
@@ -497,59 +505,6 @@ namespace WebSocketSharp.Server
             }
         }
 
-        internal void Broadcast(
-          Opcode opcode, byte[] data, Dictionary<CompressionMethod, Stream> cache
-        )
-        {
-            foreach (var session in Sessions)
-            {
-                if (_state != ServerState.Start)
-                {
-                    _log.Error("The service is shutting down.");
-                    break;
-                }
-
-                session.Context.WebSocket.Send(opcode, data, cache);
-            }
-        }
-
-        internal void Broadcast(
-          Opcode opcode, Stream stream, Dictionary<CompressionMethod, Stream> cache
-        )
-        {
-            foreach (var session in Sessions)
-            {
-                if (_state != ServerState.Start)
-                {
-                    _log.Error("The service is shutting down.");
-                    break;
-                }
-
-                session.Context.WebSocket.Send(opcode, stream, cache);
-            }
-        }
-
-        internal Dictionary<string, bool> Broadping(
-          byte[] frameAsBytes, TimeSpan timeout
-        )
-        {
-            var ret = new Dictionary<string, bool>();
-
-            foreach (var session in Sessions)
-            {
-                if (_state != ServerState.Start)
-                {
-                    _log.Error("The service is shutting down.");
-                    break;
-                }
-
-                var res = session.Context.WebSocket.Ping(frameAsBytes, timeout);
-                ret.Add(session.ID, res);
-            }
-
-            return ret;
-        }
-
         internal bool Remove(string id)
         {
             lock (_sync)
@@ -581,7 +536,7 @@ namespace WebSocketSharp.Server
         #region Public Methods
 
         /// <summary>
-        /// Sends <paramref name="data"/> to every client in the WebSocket service.
+        /// Sends <paramref name="data"/> to every client in the service.
         /// </summary>
         /// <param name="data">
         /// An array of <see cref="byte"/> that represents the binary data to send.
@@ -595,22 +550,19 @@ namespace WebSocketSharp.Server
         public void Broadcast(byte[] data)
         {
             if (_state != ServerState.Start)
-            {
-                var msg = "The current state of the manager is not Start.";
-                throw new InvalidOperationException(msg);
-            }
+                throw new InvalidOperationException("The the manager is not started.");
 
             if (data == null)
-                throw new ArgumentNullException("data");
+                throw new ArgumentNullException(nameof(data));
 
             if (data.LongLength <= WebSocket.FragmentLength)
-                Broadcast(Opcode.Binary, data, (Action)null);
+                Broadcast(Opcode.Binary, data, null);
             else
-                Broadcast(Opcode.Binary, new MemoryStream(data), (Action)null);
+                Broadcast(Opcode.Binary, RecyclableMemoryManager.Shared.GetStream(data), null);
         }
 
         /// <summary>
-        /// Sends <paramref name="data"/> to every client in the WebSocket service.
+        /// Sends <paramref name="data"/> to every client in the service.
         /// </summary>
         /// <param name="data">
         /// A <see cref="string"/> that represents the text data to send.
@@ -622,29 +574,23 @@ namespace WebSocketSharp.Server
         /// <paramref name="data"/> is <see langword="null"/>.
         /// </exception>
         /// <exception cref="ArgumentException">
-        /// <paramref name="data"/> could not be UTF-8-encoded.
+        /// <paramref name="data"/> could not be UTF-8 encoded.
         /// </exception>
         public void Broadcast(string data)
         {
             if (_state != ServerState.Start)
-            {
-                var msg = "The current state of the manager is not Start.";
-                throw new InvalidOperationException(msg);
-            }
+                throw new InvalidOperationException("The the manager is not started.");
 
             if (data == null)
                 throw new ArgumentNullException("data");
 
             if (!data.TryGetUTF8EncodedBytes(out byte[] bytes))
-            {
-                var msg = "It could not be UTF-8-encoded.";
-                throw new ArgumentException(msg, "data");
-            }
+                throw new ArgumentException("It could not be UTF-8 encoded.", nameof(data));
 
             if (bytes.LongLength <= WebSocket.FragmentLength)
-                Broadcast(Opcode.Text, bytes, (Action)null);
+                Broadcast(Opcode.Text, bytes, null);
             else
-                Broadcast(Opcode.Text, new MemoryStream(bytes), (Action)null);
+                Broadcast(Opcode.Text, RecyclableMemoryManager.Shared.GetStream(bytes), null);
         }
 
         /// <summary>
@@ -692,27 +638,20 @@ namespace WebSocketSharp.Server
                 throw new ArgumentNullException("stream");
 
             if (!stream.CanRead)
-                throw new ArgumentException("It cannot be read.", "stream");
+                throw new ArgumentException("It cannot be read.", nameof(stream));
 
             if (length < 1)
-                throw new ArgumentException("Less than 1.", "length");
+                throw new ArgumentException("Less than 1.", nameof(length));
 
             var bytes = stream.ReadBytes(length);
             var len = bytes.Length;
             if (len == 0)
-                throw new ArgumentException("No data could be read from it.", "stream");
+                throw new ArgumentException("No data could be read from it.", nameof(stream));
 
             if (len < length)
-            {
-                _log.Warn(
-                  string.Format(
-                    "Only {0} byte(s) of data could be read from the stream.",
-                    len
-                  )
-                );
-            }
+                _log.Warn($"Only {len} byte(s) of data could be read from the stream.");
 
-            Broadcast(Opcode.Binary, bytes, (Action)null);
+            Broadcast(Opcode.Binary, bytes, null);
         }
 
         /// <summary>
@@ -754,7 +693,7 @@ namespace WebSocketSharp.Server
             if (data.LongLength <= WebSocket.FragmentLength)
                 BroadcastAsync(Opcode.Binary, data, completed);
             else
-                BroadcastAsync(Opcode.Binary, new MemoryStream(data), completed);
+                BroadcastAsync(Opcode.Binary, RecyclableMemoryManager.Shared.GetStream(data), completed);
         }
 
         /// <summary>
@@ -783,7 +722,7 @@ namespace WebSocketSharp.Server
         /// <paramref name="data"/> is <see langword="null"/>.
         /// </exception>
         /// <exception cref="ArgumentException">
-        /// <paramref name="data"/> could not be UTF-8-encoded.
+        /// <paramref name="data"/> could not be UTF-8 encoded.
         /// </exception>
         public void BroadcastAsync(string data, Action completed)
         {
@@ -798,19 +737,19 @@ namespace WebSocketSharp.Server
 
             if (!data.TryGetUTF8EncodedBytes(out byte[] bytes))
             {
-                var msg = "It could not be UTF-8-encoded.";
+                var msg = "It could not be UTF-8 encoded.";
                 throw new ArgumentException(msg, "data");
             }
 
             if (bytes.LongLength <= WebSocket.FragmentLength)
                 BroadcastAsync(Opcode.Text, bytes, completed);
             else
-                BroadcastAsync(Opcode.Text, new MemoryStream(bytes), completed);
+                BroadcastAsync(Opcode.Text, RecyclableMemoryManager.Shared.GetStream(bytes), completed);
         }
 
         /// <summary>
         /// Sends the data from <paramref name="stream"/> asynchronously to
-        /// every client in the WebSocket service.
+        /// every client in the service.
         /// </summary>
         /// <remarks>
         ///   <para>
@@ -958,7 +897,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="reason"/> could not be UTF-8-encoded.
+        ///   <paramref name="reason"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         /// <exception cref="InvalidOperationException">
@@ -1035,7 +974,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="reason"/> could not be UTF-8-encoded.
+        ///   <paramref name="reason"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         /// <exception cref="InvalidOperationException">
@@ -1115,7 +1054,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="message"/> could not be UTF-8-encoded.
+        ///   <paramref name="message"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         /// <exception cref="InvalidOperationException">
@@ -1169,7 +1108,7 @@ namespace WebSocketSharp.Server
         ///   The current state of the WebSocket connection is not Open.
         ///   </para>
         /// </exception>
-        public void SendTo(byte[] data, string id)
+        public void SendTo(MessageFrameType type, byte[] data, string id)
         {
             if (!TryGetSession(id, out IWebSocketSession session))
             {
@@ -1177,7 +1116,7 @@ namespace WebSocketSharp.Server
                 throw new InvalidOperationException(msg);
             }
 
-            session.Context.WebSocket.Send(data);
+            session.Context.WebSocket.Send(type, data);
         }
 
         /// <summary>
@@ -1208,7 +1147,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="data"/> could not be UTF-8-encoded.
+        ///   <paramref name="data"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         /// <exception cref="InvalidOperationException">
@@ -1294,7 +1233,7 @@ namespace WebSocketSharp.Server
         ///   The current state of the WebSocket connection is not Open.
         ///   </para>
         /// </exception>
-        public void SendTo(Stream stream, int length, string id)
+        public void SendTo(MessageFrameType type, Stream stream, int length, string id)
         {
             if (!TryGetSession(id, out IWebSocketSession session))
             {
@@ -1302,7 +1241,7 @@ namespace WebSocketSharp.Server
                 throw new InvalidOperationException(msg);
             }
 
-            session.Context.WebSocket.Send(stream, length);
+            session.Context.WebSocket.Send(type, stream, length);
         }
 
         /// <summary>
@@ -1356,12 +1295,12 @@ namespace WebSocketSharp.Server
         ///   The current state of the WebSocket connection is not Open.
         ///   </para>
         /// </exception>
-        public void SendToAsync(byte[] data, string id, Action<bool> completed)
+        public void SendToAsync(MessageFrameType type, byte[] data, string id, Action<bool> completed)
         {
             if (!TryGetSession(id, out IWebSocketSession session))
                 throw new InvalidOperationException("The session could not be found.");
         
-            session.Context.WebSocket.SendAsync(data, completed);
+            session.Context.WebSocket.SendAsync(type, data, completed);
         }
 
         /// <summary>
@@ -1409,7 +1348,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="data"/> could not be UTF-8-encoded.
+        ///   <paramref name="data"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         /// <exception cref="InvalidOperationException">
@@ -1514,17 +1453,16 @@ namespace WebSocketSharp.Server
         ///   </para>
         /// </exception>
         public void SendToAsync(
-          Stream stream, int length, string id, Action<bool> completed
-        )
+            MessageFrameType type, Stream stream, int length, string id, Action<bool> completed)
         {
             if (!TryGetSession(id, out IWebSocketSession session))
                 throw new InvalidOperationException("The session could not be found.");
             
-            session.Context.WebSocket.SendAsync(stream, length, completed);
+            session.Context.WebSocket.SendAsync(type, stream, length, completed);
         }
 
         /// <summary>
-        /// Cleans up the inactive sessions in the WebSocket service.
+        /// Cleans up the inactive sessions in the service.
         /// </summary>
         public void Sweep()
         {
@@ -1557,17 +1495,22 @@ namespace WebSocketSharp.Server
 
                     if (_sessions.TryGetValue(id, out IWebSocketSession session))
                     {
-                        var state = session.ConnectionState;
-                        if (state == WebSocketState.Open)
-                            session.Context.WebSocket.Close(CloseStatusCode.Abnormal);
-                        else if (state == WebSocketState.Closing)
-                            continue;
-                        else
-                            _sessions.Remove(id);
+                        switch (session.ConnectionState)
+                        {
+                            case WebSocketState.Open:
+                                session.Context.WebSocket.Close(CloseStatusCode.Abnormal);
+                                break;
+
+                            case WebSocketState.Closing:
+                                continue;
+
+                            default:
+                                _sessions.Remove(id);
+                                break;
+                        }
                     }
                 }
             }
-
             _sweeping = false;
         }
 
@@ -1600,10 +1543,10 @@ namespace WebSocketSharp.Server
         public bool TryGetSession(string id, out IWebSocketSession session)
         {
             if (id == null)
-                throw new ArgumentNullException("id");
+                throw new ArgumentNullException(nameof(id));
 
             if (id.Length == 0)
-                throw new ArgumentException("An empty string.", "id");
+                throw new ArgumentException("The string may not be empty.", nameof(id));
 
             return InternalTryGetSession(id, out session);
         }

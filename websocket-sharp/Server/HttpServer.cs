@@ -399,7 +399,7 @@ namespace WebSocketSharp.Server
                 if (value.Length == 0)
                     throw new ArgumentException("An empty string.", nameof(value));
 
-                value = value.TrimSlashOrBackslashFromEnd();
+                value = value.AsSpan().TrimSlashOrBackslashFromEnd().ToString();
 
                 string full;
                 try
@@ -423,8 +423,8 @@ namespace WebSocketSharp.Server
                 if (full == "/")
                     throw new ArgumentException("An absolute root.", nameof(value));
 
-                full = full.TrimSlashOrBackslashFromEnd();
-                if (full.Length == 2 && full[1] == ':')
+                var trimmedFull = full.AsSpan().TrimSlashOrBackslashFromEnd();
+                if (trimmedFull.Length == 2 && trimmedFull[1] == ':')
                     throw new ArgumentException("An absolute root.", nameof(value));
 
                 if (!CanSet(out string msg))
@@ -440,7 +440,6 @@ namespace WebSocketSharp.Server
                         _log.Warn(msg);
                         return;
                     }
-
                     _docRootPath = value;
                 }
             }
@@ -709,7 +708,7 @@ namespace WebSocketSharp.Server
         }
 
         /// <summary>
-        /// Gets the management function for the WebSocket services
+        /// Gets the management function for the services
         /// provided by the server.
         /// </summary>
         /// <value>
@@ -725,42 +724,42 @@ namespace WebSocketSharp.Server
         /// <summary>
         /// Occurs when the server receives an HTTP CONNECT request.
         /// </summary>
-        public event EventHandler<HttpRequestEventArgs> OnConnect;
+        public event EventHandler<HttpRequestEvent> OnConnect;
 
         /// <summary>
         /// Occurs when the server receives an HTTP DELETE request.
         /// </summary>
-        public event EventHandler<HttpRequestEventArgs> OnDelete;
+        public event EventHandler<HttpRequestEvent> OnDelete;
 
         /// <summary>
         /// Occurs when the server receives an HTTP GET request.
         /// </summary>
-        public event EventHandler<HttpRequestEventArgs> OnGet;
+        public event EventHandler<HttpRequestEvent> OnGet;
 
         /// <summary>
         /// Occurs when the server receives an HTTP HEAD request.
         /// </summary>
-        public event EventHandler<HttpRequestEventArgs> OnHead;
+        public event EventHandler<HttpRequestEvent> OnHead;
 
         /// <summary>
         /// Occurs when the server receives an HTTP OPTIONS request.
         /// </summary>
-        public event EventHandler<HttpRequestEventArgs> OnOptions;
+        public event EventHandler<HttpRequestEvent> OnOptions;
 
         /// <summary>
         /// Occurs when the server receives an HTTP POST request.
         /// </summary>
-        public event EventHandler<HttpRequestEventArgs> OnPost;
+        public event EventHandler<HttpRequestEvent> OnPost;
 
         /// <summary>
         /// Occurs when the server receives an HTTP PUT request.
         /// </summary>
-        public event EventHandler<HttpRequestEventArgs> OnPut;
+        public event EventHandler<HttpRequestEvent> OnPut;
 
         /// <summary>
         /// Occurs when the server receives an HTTP TRACE request.
         /// </summary>
-        public event EventHandler<HttpRequestEventArgs> OnTrace;
+        public event EventHandler<HttpRequestEvent> OnTrace;
 
         #endregion
 
@@ -890,7 +889,7 @@ namespace WebSocketSharp.Server
                                     : null;
 
             if (evt != null)
-                evt(this, new HttpRequestEventArgs(context, _docRootPath));
+                evt(this, new HttpRequestEvent(context, _docRootPath));
             else
                 context.Response.StatusCode = 501; // Not Implemented
 
@@ -907,7 +906,7 @@ namespace WebSocketSharp.Server
             }
 
             var path = uri.AbsolutePath;
-            if (path.IndexOfAny(new[] { '%', '+' }) > -1)
+            if (path.IndexOfAny(HttpUtility.UrlEncodingChars) > -1)
                 path = HttpUtility.UrlDecode(path, Encoding.UTF8);
 
             if (!_services.InternalTryGetServiceHost(path, out WebSocketServiceHost host))
@@ -1561,7 +1560,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="reason"/> could not be UTF-8-encoded.
+        ///   <paramref name="reason"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         [Obsolete("This method will be removed.")]
@@ -1589,7 +1588,7 @@ namespace WebSocketSharp.Server
 
                 if (!reason.TryGetUTF8EncodedBytes(out byte[] bytes))
                 {
-                    var msg = "It could not be UTF-8-encoded.";
+                    var msg = "It could not be UTF-8 encoded.";
                     throw new ArgumentException(msg, "reason");
                 }
 
@@ -1643,7 +1642,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="reason"/> could not be UTF-8-encoded.
+        ///   <paramref name="reason"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         [Obsolete("This method will be removed.")]
@@ -1665,7 +1664,7 @@ namespace WebSocketSharp.Server
 
                 if (!reason.TryGetUTF8EncodedBytes(out byte[] bytes))
                 {
-                    var msg = "It could not be UTF-8-encoded.";
+                    var msg = "It could not be UTF-8 encoded.";
                     throw new ArgumentException(msg, "reason");
                 }
 

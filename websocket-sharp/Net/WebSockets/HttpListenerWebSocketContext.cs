@@ -34,28 +34,28 @@ using System.Security.Principal;
 
 namespace WebSocketSharp.Net.WebSockets
 {
-  /// <summary>
-  /// Provides the access to the information in a WebSocket handshake request to
-  /// a <see cref="HttpListener"/> instance.
-  /// </summary>
-  public class HttpListenerWebSocketContext : WebSocketContext
-  {
-    #region Private Fields
-
-    private HttpListenerContext _context;
-    private WebSocket           _websocket;
-
-    #endregion
-
-    #region Internal Constructors
-
-    internal HttpListenerWebSocketContext (
-      HttpListenerContext context, string protocol
-    )
+    /// <summary>
+    /// Provides the access to the information in a WebSocket handshake request to
+    /// a <see cref="HttpListener"/> instance.
+    /// </summary>
+    public class HttpListenerWebSocketContext : WebSocketContext
     {
-      _context = context;
-      _websocket = new WebSocket (this, protocol);
-    }
+        #region Private Fields
+
+        private HttpListenerContext _context;
+        private WebSocket _websocket;
+
+        #endregion
+
+        #region Internal Constructors
+
+        internal HttpListenerWebSocketContext(
+          HttpListenerContext context, string protocol
+        )
+        {
+            _context = context;
+            _websocket = new WebSocket(this, protocol);
+        }
 
         #endregion
 
@@ -215,21 +215,24 @@ namespace WebSocketSharp.Net.WebSockets
         ///   the collection of the names of the subprotocols.
         ///   </para>
         /// </value>
-        public override IEnumerable<string> SecWebSocketProtocols {
-      get {
-        var val = _context.Request.Headers["Sec-WebSocket-Protocol"];
-        if (val == null || val.Length == 0)
-          yield break;
+        public override IEnumerable<string> SecWebSocketProtocols
+        {
+            get
+            {
+                var val = _context.Request.Headers["Sec-WebSocket-Protocol"];
+                if (val == null || val.Length == 0)
+                    yield break;
 
-        foreach (var elm in val.Split (',')) {
-          var protocol = elm.Trim ();
-          if (protocol.Length == 0)
-            continue;
+                foreach (var elm in val.Split(','))
+                {
+                    var protocol = elm.Trim();
+                    if (protocol.Length == 0)
+                        continue;
 
-          yield return protocol;
+                    yield return protocol;
+                }
+            }
         }
-      }
-    }
 
         /// <summary>
         /// Gets the value of the Sec-WebSocket-Version header included in
@@ -291,32 +294,32 @@ namespace WebSocketSharp.Net.WebSockets
 
         #region Internal Methods
 
-        internal void Close ()
-    {
-      _context.Connection.Close (true);
+        internal void Close()
+        {
+            _context.Connection.Close(true);
+        }
+
+        internal void Close(HttpStatusCode code)
+        {
+            _context.Response.Close(code);
+        }
+
+        #endregion
+
+        #region Public Methods
+
+        /// <summary>
+        /// Returns a string that represents the current instance.
+        /// </summary>
+        /// <returns>
+        /// A <see cref="string"/> that contains the request line and headers
+        /// included in the handshake request.
+        /// </returns>
+        public override string ToString()
+        {
+            return _context.Request.ToString();
+        }
+
+        #endregion
     }
-
-    internal void Close (HttpStatusCode code)
-    {
-      _context.Response.Close (code);
-    }
-
-    #endregion
-
-    #region Public Methods
-
-    /// <summary>
-    /// Returns a string that represents the current instance.
-    /// </summary>
-    /// <returns>
-    /// A <see cref="string"/> that contains the request line and headers
-    /// included in the handshake request.
-    /// </returns>
-    public override string ToString ()
-    {
-      return _context.Request.ToString ();
-    }
-
-    #endregion
-  }
 }

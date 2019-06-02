@@ -24,6 +24,7 @@ namespace WebSocketSharp.Memory
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Diagnostics.CodeAnalysis;
     using System.IO;
     using System.Threading;
@@ -44,8 +45,8 @@ namespace WebSocketSharp.Memory
     /// can be easily reused.
     /// 
     /// The stream is implemented on top of a series of uniformly-sized blocks. As the stream's length grows,
-    /// additional blocks are retrieved from the memory manager. It is these blocks that are pooled, not the stream
-    /// object itself.
+    /// additional blocks are retrieved from the memory manager. It is these blocks that are pooled, 
+    /// not the stream object itself.
     /// 
     /// The biggest wrinkle in this implementation is when GetBuffer() is called. This requires a single 
     /// contiguous buffer. If only a single block is in use, then that block is returned. If multiple blocks 
@@ -57,38 +58,32 @@ namespace WebSocketSharp.Memory
     /// are maintained in the stream until the stream is disposed (unless AggressiveBufferReturn is enabled in the stream manager).
     /// 
     /// </remarks>
-    public sealed class RecyclableMemoryStream : MemoryStream
+    public class RecyclableMemoryStream : MemoryStream
     {
-        private const long MaxStreamLength = Int32.MaxValue;
+        private const long MaxStreamLength = int.MaxValue;
 
-        private static readonly byte[] emptyArray = new byte[0];
+        private int _length;
+        private int _position;
 
         /// <summary>
-        /// All of these blocks must be the same size
+        /// All of these blocks must be the same size.
         /// </summary>
-        private readonly List<byte[]> blocks = new List<byte[]>(1);
+        private List<byte[]> _blocks;
 
         /// <summary>
         /// This buffer exists so that WriteByte can forward all of its calls to Write
         /// without creating a new byte[] buffer on every call.
         /// </summary>
-        private readonly byte[] byteBuffer = new byte[1];
-
-        private readonly Guid id;
-
-        private readonly RecyclableMemoryManager memoryManager;
-
-        private readonly string tag;
+        private byte[] _byteBuffer;
 
         /// <summary>
         /// This list is used to store buffers once they're replaced by something larger.
         /// This is for the cases where you have users of this class that may hold onto the buffers longer
         /// than they should and you want to prevent race conditions which could corrupt the data.
         /// </summary>
-        private List<byte[]> dirtyBuffers;
+        private List<byte[]> _dirtyBuffers;
 
-        // long to allow Interlocked.Read (for .NET Standard 1.4 compat)
-        private long disposedState;
+        protected long _disposedState;
 
         /// <summary>
         /// This is only set by GetBuffer() if the necessary buffer is larger than a single block size, or on
@@ -97,46 +92,26 @@ namespace WebSocketSharp.Memory
         /// <remarks>If this field is non-null, it contains the concatenation of the bytes found in the individual
         /// blocks. Once it is created, this (or a larger) largeBuffer will be used for the life of the stream.
         /// </remarks>
-        private byte[] largeBuffer;
+        private byte[] _largeBuffer;
 
+        #region Internal Properties
         /// <summary>
-        /// Unique identifier for this stream across it's entire lifetime
+        /// Unique identifier for this stream across it's entire lifetime.
         /// </summary>
         /// <exception cref="ObjectDisposedException">Object has been disposed</exception>
-        internal Guid Id
-        {
-            get
-            {
-                this.CheckDisposed();
-                return this.id;
-            }
-        }
-
-        /// <summary>
-        /// A temporary identifier for the current usage of this stream.
-        /// </summary>
-        /// <exception cref="ObjectDisposedException">Object has been disposed</exception>
-        internal string Tag
-        {
-            get
-            {
-                this.CheckDisposed();
-                return this.tag;
-            }
-        }
+        internal Guid ID { get; }
 
         /// <summary>
         /// Gets the memory manager being used by this stream.
         /// </summary>
         /// <exception cref="ObjectDisposedException">Object has been disposed</exception>
-        internal RecyclableMemoryManager MemoryManager
-        {
-            get
-            {
-                this.CheckDisposed();
-                return this.memoryManager;
-            }
-        }
+        internal RecyclableMemoryManager MemoryManager { get; }
+
+        /// <summary>
+        /// A temporary identifier for the current usage of this stream.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">Object has been disposed</exception>
+        internal string Tag { get; }
 
         /// <summary>
         /// Callstack of the constructor. It is only set if MemoryManager.GenerateCallStacks is true,
@@ -149,6 +124,7 @@ namespace WebSocketSharp.Memory
         /// which should only be in debugging situations.
         /// </summary>
         internal string DisposeStack { get; private set; }
+        #endregion
 
         #region Constructors
         /// <summary>
@@ -156,7 +132,9 @@ namespace WebSocketSharp.Memory
         /// </summary>
         /// <param name="memoryManager">The memory manager</param>
         public RecyclableMemoryStream(RecyclableMemoryManager memoryManager)
-            : this(memoryManager, null, 0, null) { }
+            : this(memoryManager, null, 0, null)
+        {
+        }
 
         /// <summary>
         /// Allocate a new RecyclableMemoryStream object
@@ -164,7 +142,9 @@ namespace WebSocketSharp.Memory
         /// <param name="memoryManager">The memory manager</param>
         /// <param name="tag">A string identifying this stream for logging and debugging purposes</param>
         public RecyclableMemoryStream(RecyclableMemoryManager memoryManager, string tag)
-            : this(memoryManager, tag, 0, null) { }
+            : this(memoryManager, tag, 0, null)
+        {
+        }
 
         /// <summary>
         /// Allocate a new RecyclableMemoryStream object
@@ -173,7 +153,9 @@ namespace WebSocketSharp.Memory
         /// <param name="tag">A string identifying this stream for logging and debugging purposes</param>
         /// <param name="requestedSize">The initial requested size to prevent future allocations</param>
         public RecyclableMemoryStream(RecyclableMemoryManager memoryManager, string tag, int requestedSize)
-            : this(memoryManager, tag, requestedSize, null) { }
+            : this(memoryManager, tag, requestedSize, null)
+        {
+        }
 
         /// <summary>
         /// Allocate a new RecyclableMemoryStream object
@@ -181,43 +163,40 @@ namespace WebSocketSharp.Memory
         /// <param name="memoryManager">The memory manager</param>
         /// <param name="tag">A string identifying this stream for logging and debugging purposes</param>
         /// <param name="requestedSize">The initial requested size to prevent future allocations</param>
-        /// <param name="initialLargeBuffer">An initial buffer to use. This buffer will be owned by the stream and returned to the memory manager upon Dispose.</param>
-        internal RecyclableMemoryStream(RecyclableMemoryManager memoryManager, string tag, int requestedSize,
-                                        byte[] initialLargeBuffer)
-            : base(emptyArray)
+        /// <param name="initialLargeBuffer">
+        /// An initial buffer to use. This buffer will be owned by the
+        /// stream and returned to the memory manager upon Dispose.
+        /// </param>
+        internal RecyclableMemoryStream(
+            RecyclableMemoryManager memoryManager, string tag, int requestedSize, byte[] initialLargeBuffer)
+            : base(Array.Empty<byte>())
         {
-            this.memoryManager = memoryManager;
-            this.id = Guid.NewGuid();
-            this.tag = tag;
+            MemoryManager = memoryManager;
+            ID = Guid.NewGuid();
+            Tag = tag;
+
+            _blocks = MemoryManager.GetArrayList();
 
             if (requestedSize < memoryManager.BlockSize)
-            {
                 requestedSize = memoryManager.BlockSize;
-            }
 
             if (initialLargeBuffer == null)
-            {
-                this.EnsureCapacity(requestedSize);
-            }
+                EnsureCapacity(requestedSize);
             else
-            {
-                this.largeBuffer = initialLargeBuffer;
-            }
+                _largeBuffer = initialLargeBuffer;
 
-            if (this.memoryManager.GenerateCallStacks)
-            {
-                this.AllocationStack = Environment.StackTrace;
-            }
-
-            RecyclableMemoryManager.Events.Writer.MemoryStreamCreated(this.id, this.tag, requestedSize);
-            this.memoryManager.ReportStreamCreated();
+            if (MemoryManager.GenerateCallStacks)
+                AllocationStack = Environment.StackTrace;
+            
+            RecyclableMemoryManager.Events.Writer.MemoryStreamCreated(ID, Tag, requestedSize);
+            MemoryManager.ReportStreamCreated();
         }
         #endregion
 
         #region Dispose and Finalize
         ~RecyclableMemoryStream()
         {
-            this.Dispose(false);
+            Dispose(false);
         }
 
         /// <summary>
@@ -228,39 +207,30 @@ namespace WebSocketSharp.Memory
             Justification = "We have different disposal semantics, so SuppressFinalize is in a different spot.")]
         protected override void Dispose(bool disposing)
         {
-            if (Interlocked.CompareExchange(ref this.disposedState, 1, 0) != 0)
+            if (Interlocked.CompareExchange(ref _disposedState, 1, 0) != 0)
             {
                 string doubleDisposeStack = null;
-                if (this.memoryManager.GenerateCallStacks)
-                {
+                if (MemoryManager.GenerateCallStacks)
                     doubleDisposeStack = Environment.StackTrace;
-                }
 
-                RecyclableMemoryManager.Events.Writer.MemoryStreamDoubleDispose(this.id, this.tag,
-                                                                                     this.AllocationStack,
-                                                                                     this.DisposeStack,
-                                                                                     doubleDisposeStack);
+                RecyclableMemoryManager.Events.Writer.MemoryStreamDoubleDispose(
+                    ID, Tag, AllocationStack, DisposeStack, doubleDisposeStack);
                 return;
             }
 
-            RecyclableMemoryManager.Events.Writer.MemoryStreamDisposed(this.id, this.tag);
+            RecyclableMemoryManager.Events.Writer.MemoryStreamDisposed(ID, Tag);
 
-            if (this.memoryManager.GenerateCallStacks)
-            {
-                this.DisposeStack = Environment.StackTrace;
-            }
+            if (MemoryManager.GenerateCallStacks)
+                DisposeStack = Environment.StackTrace;
 
             if (disposing)
             {
-                this.memoryManager.ReportStreamDisposed();
-
-                GC.SuppressFinalize(this);
+                MemoryManager.ReportStreamDisposed();
             }
             else
             {
                 // We're being finalized.
-
-                RecyclableMemoryManager.Events.Writer.MemoryStreamFinalized(this.id, this.tag, this.AllocationStack);
+                RecyclableMemoryManager.Events.Writer.MemoryStreamFinalized(ID, Tag, AllocationStack);
 
 #if !NETSTANDARD1_4
                 if (AppDomain.CurrentDomain.IsFinalizingForUnload())
@@ -272,33 +242,32 @@ namespace WebSocketSharp.Memory
                     return;
                 }
 #endif
-
-                this.memoryManager.ReportStreamFinalized();
+                MemoryManager.ReportStreamFinalized();
             }
 
-            this.memoryManager.ReportStreamLength(this.length);
+            MemoryManager.ReportStreamLength(_length);
 
-            if (this.largeBuffer != null)
+            if (_largeBuffer != null)
+                MemoryManager.ReturnLargeBuffer(_largeBuffer, Tag);
+
+            if (_dirtyBuffers != null)
             {
-                this.memoryManager.ReturnLargeBuffer(this.largeBuffer, this.tag);
+                foreach (var buffer in _dirtyBuffers)
+                    MemoryManager.ReturnLargeBuffer(buffer, Tag);
+                MemoryManager.ReturnArrayList(_dirtyBuffers);
             }
 
-            if (this.dirtyBuffers != null)
+            if (_blocks != null)
             {
-                foreach (var buffer in this.dirtyBuffers)
-                {
-                    this.memoryManager.ReturnLargeBuffer(buffer, this.tag);
-                }
+                MemoryManager.ReturnBlocks(_blocks, Tag);
+                MemoryManager.ReturnArrayList(_blocks);
             }
-
-            this.memoryManager.ReturnBlocks(this.blocks, this.tag);
-            this.blocks.Clear();
 
             base.Dispose(disposing);
         }
 
         /// <summary>
-        /// Equivalent to Dispose
+        /// Equivalent to Dispose()
         /// </summary>
 #if NETSTANDARD1_4
         public void Close()
@@ -306,7 +275,7 @@ namespace WebSocketSharp.Memory
         public override void Close()
 #endif
         {
-            this.Dispose(true);
+            Dispose(true);
         }
         #endregion
 
@@ -325,23 +294,19 @@ namespace WebSocketSharp.Memory
         {
             get
             {
-                this.CheckDisposed();
-                if (this.largeBuffer != null)
-                {
-                    return this.largeBuffer.Length;
-                }
+                AssertNotDisposed();
+                if (_largeBuffer != null)
+                    return _largeBuffer.Length;
 
-                long size = (long)this.blocks.Count * this.memoryManager.BlockSize;
+                long size = (long)_blocks.Count * MemoryManager.BlockSize;
                 return (int)Math.Min(int.MaxValue, size);
             }
             set
             {
-                this.CheckDisposed();
-                this.EnsureCapacity(value);
+                AssertNotDisposed();
+                EnsureCapacity(value);
             }
         }
-
-        private int length;
 
         /// <summary>
         /// Gets the number of bytes written to this stream.
@@ -351,12 +316,10 @@ namespace WebSocketSharp.Memory
         {
             get
             {
-                this.CheckDisposed();
-                return this.length;
+                AssertNotDisposed();
+                return _length;
             }
         }
-
-        private int position;
 
         /// <summary>
         /// Gets the current position in the stream
@@ -366,35 +329,32 @@ namespace WebSocketSharp.Memory
         {
             get
             {
-                this.CheckDisposed();
-                return this.position;
+                AssertNotDisposed();
+                return _position;
             }
             set
             {
-                this.CheckDisposed();
+                AssertNotDisposed();
+
                 if (value < 0)
-                {
-                    throw new ArgumentOutOfRangeException("value", "value must be non-negative");
-                }
+                    throw new ArgumentOutOfRangeException(nameof(value), "value must be non-negative");
 
                 if (value > MaxStreamLength)
-                {
-                    throw new ArgumentOutOfRangeException("value", "value cannot be more than " + MaxStreamLength);
-                }
+                    throw new ArgumentOutOfRangeException(nameof(value), "value cannot be more than " + MaxStreamLength);
 
-                this.position = (int)value;
+                _position = (int)value;
             }
         }
 
         /// <summary>
         /// Whether the stream can currently read
         /// </summary>
-        public override bool CanRead => !this.Disposed;
+        public override bool CanRead => !IsDisposed;
 
         /// <summary>
         /// Whether the stream can currently seek
         /// </summary>
-        public override bool CanSeek => !this.Disposed;
+        public override bool CanSeek => !IsDisposed;
 
         /// <summary>
         /// Always false
@@ -404,7 +364,7 @@ namespace WebSocketSharp.Memory
         /// <summary>
         /// Whether the stream can currently write
         /// </summary>
-        public override bool CanWrite => !this.Disposed;
+        public override bool CanWrite => !IsDisposed;
 
         /// <summary>
         /// Returns a single buffer containing the contents of the stream.
@@ -420,32 +380,32 @@ namespace WebSocketSharp.Memory
         public override byte[] GetBuffer()
 #endif
         {
-            this.CheckDisposed();
+            AssertNotDisposed();
 
-            if (this.largeBuffer != null)
-                return this.largeBuffer;
-            
-            if (this.blocks.Count == 1)
-                return this.blocks[0];
+            if (_largeBuffer != null)
+                return _largeBuffer;
+
+            if (_blocks.Count == 1)
+                return _blocks[0];
 
             // Buffer needs to reflect the capacity, not the length, because
             // it's possible that people will manipulate the buffer directly
             // and set the length afterward. Capacity sets the expectation
             // for the size of the buffer.
-            var newBuffer = this.memoryManager.GetLargeBuffer(this.Capacity, this.tag);
+            var newBuffer = MemoryManager.GetLargeBuffer(Capacity, Tag);
 
             // InternalRead will check for existence of largeBuffer, so make sure we
             // don't set it until after we've copied the data.
-            this.InternalRead(newBuffer, 0, this.length, 0);
-            this.largeBuffer = newBuffer;
+            InternalRead(newBuffer, 0, _length, 0);
+            _largeBuffer = newBuffer;
 
-            if (this.blocks.Count > 0 && this.memoryManager.AggressiveBufferReturn)
+            if (_blocks.Count > 0 && MemoryManager.AggressiveBufferReturn)
             {
-                this.memoryManager.ReturnBlocks(this.blocks, this.tag);
-                this.blocks.Clear();
+                MemoryManager.ReturnBlocks(_blocks, Tag);
+                _blocks.Clear();
             }
 
-            return this.largeBuffer;
+            return _largeBuffer;
         }
 
         /// <summary>
@@ -461,8 +421,8 @@ namespace WebSocketSharp.Memory
         public override bool TryGetBuffer(out ArraySegment<byte> buffer)
 #endif
         {
-            this.CheckDisposed();
-            buffer = new ArraySegment<byte>(this.GetBuffer(), 0, (int)this.Length);
+            AssertNotDisposed();
+            buffer = new ArraySegment<byte>(GetBuffer(), 0, (int)Length);
             // GetBuffer has no failure modes, so this should always succeed
             return true;
         }
@@ -477,13 +437,13 @@ namespace WebSocketSharp.Memory
         [Obsolete("This method has degraded performance vs. GetBuffer and should be avoided.")]
         public override byte[] ToArray()
         {
-            this.CheckDisposed();
-            var newBuffer = new byte[this.Length];
+            AssertNotDisposed();
+            var newBuffer = new byte[Length];
 
-            this.InternalRead(newBuffer, 0, this.length, 0);
-            string stack = this.memoryManager.GenerateCallStacks ? Environment.StackTrace : null;
-            RecyclableMemoryManager.Events.Writer.MemoryStreamToArray(this.id, this.tag, stack, 0);
-            this.memoryManager.ReportStreamToArray();
+            InternalRead(newBuffer, 0, _length, 0);
+            string stack = MemoryManager.GenerateCallStacks ? Environment.StackTrace : null;
+            RecyclableMemoryManager.Events.Writer.MemoryStreamToArray(ID, Tag, stack, 0);
+            MemoryManager.ReportStreamToArray();
 
             return newBuffer;
         }
@@ -502,7 +462,7 @@ namespace WebSocketSharp.Memory
         /// <exception cref="ObjectDisposedException">Object has been disposed</exception>
         public override int Read(byte[] buffer, int offset, int count)
         {
-            return this.SafeRead(buffer, offset, count, ref this.position);
+            return SafeRead(buffer, offset, count, ref _position);
         }
 
         /// <summary>
@@ -519,28 +479,20 @@ namespace WebSocketSharp.Memory
         /// <exception cref="ObjectDisposedException">Object has been disposed</exception>
         public int SafeRead(byte[] buffer, int offset, int count, ref int streamPosition)
         {
-            this.CheckDisposed();
+            AssertNotDisposed();
             if (buffer == null)
-            {
                 throw new ArgumentNullException(nameof(buffer));
-            }
 
             if (offset < 0)
-            {
                 throw new ArgumentOutOfRangeException(nameof(offset), "offset cannot be negative");
-            }
 
             if (count < 0)
-            {
                 throw new ArgumentOutOfRangeException(nameof(count), "count cannot be negative");
-            }
 
             if (offset + count > buffer.Length)
-            {
                 throw new ArgumentException("buffer length must be at least offset + count");
-            }
 
-            int amountRead = this.InternalRead(buffer, offset, count, streamPosition);
+            int amountRead = InternalRead(buffer, offset, count, streamPosition);
             streamPosition += amountRead;
             return amountRead;
         }
@@ -586,37 +538,37 @@ namespace WebSocketSharp.Memory
         /// <exception cref="ObjectDisposedException">Object has been disposed</exception>
         public override void Write(byte[] buffer, int offset, int count)
         {
-            this.CheckDisposed();
+            AssertNotDisposed();
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));
 
             if (offset < 0)
                 throw new ArgumentOutOfRangeException(
                     nameof(offset), offset, "Offset must be in the range of 0 - buffer.Length-1");
-        
+
             if (count < 0)
                 throw new ArgumentOutOfRangeException(nameof(count), count, "count must be non-negative");
 
             if (count + offset > buffer.Length)
                 throw new ArgumentException("count must be greater than buffer.Length - offset");
-            
-            int blockSize = this.memoryManager.BlockSize;
-            long end = (long)this.position + count;
+
+            int blockSize = MemoryManager.BlockSize;
+            long end = (long)_position + count;
             // Check for overflow
             if (end > MaxStreamLength)
                 throw new IOException("Maximum capacity exceeded");
-            
-            this.EnsureCapacity((int)end);
 
-            if (this.largeBuffer == null)
+            EnsureCapacity((int)end);
+
+            if (_largeBuffer == null)
             {
                 int bytesRemaining = count;
                 int bytesWritten = 0;
-                var blockAndOffset = this.GetBlockAndRelativeOffset(this.position);
+                var blockAndOffset = GetBlockAndRelativeOffset(_position);
 
                 while (bytesRemaining > 0)
                 {
-                    byte[] currentBlock = this.blocks[blockAndOffset.Block];
+                    byte[] currentBlock = _blocks[blockAndOffset.Block];
                     int remainingInBlock = blockSize - blockAndOffset.Offset;
                     int amountToWriteInBlock = Math.Min(remainingInBlock, bytesRemaining);
 
@@ -633,10 +585,10 @@ namespace WebSocketSharp.Memory
             }
             else
             {
-                Buffer.BlockCopy(buffer, offset, this.largeBuffer, this.position, count);
+                Buffer.BlockCopy(buffer, offset, _largeBuffer, _position, count);
             }
-            this.position = (int)end;
-            this.length = Math.Max(this.position, this.length);
+            _position = (int)end;
+            _length = Math.Max(_position, _length);
         }
 
 #if NETCOREAPP2_1 || NETSTANDARD2_1
@@ -693,7 +645,7 @@ namespace WebSocketSharp.Memory
         /// </summary>
         public override string ToString()
         {
-            return $"Id = {this.Id}, Tag = {this.Tag}, Length = {this.Length:N0} bytes";
+            return $"Id = {ID}, Tag = {Tag}, Length = {Length:N0} bytes";
         }
 
         /// <summary>
@@ -703,9 +655,13 @@ namespace WebSocketSharp.Memory
         /// <exception cref="ObjectDisposedException">Object has been disposed</exception>
         public override void WriteByte(byte value)
         {
-            this.CheckDisposed();
-            this.byteBuffer[0] = value;
-            this.Write(this.byteBuffer, 0, 1);
+            AssertNotDisposed();
+
+            if (_byteBuffer == null)
+                _byteBuffer = new byte[1];
+
+            _byteBuffer[0] = value;
+            Write(_byteBuffer, 0, 1);
         }
 
         /// <summary>
@@ -715,7 +671,7 @@ namespace WebSocketSharp.Memory
         /// <exception cref="ObjectDisposedException">Object has been disposed</exception>
         public override int ReadByte()
         {
-            return this.SafeReadByte(ref this.position);
+            return SafeReadByte(ref _position);
         }
 
         /// <summary>
@@ -726,20 +682,20 @@ namespace WebSocketSharp.Memory
         /// <exception cref="ObjectDisposedException">Object has been disposed</exception>
         public int SafeReadByte(ref int streamPosition)
         {
-            this.CheckDisposed();
-            if (streamPosition == this.length)
+            AssertNotDisposed();
+            if (streamPosition == _length)
             {
                 return -1;
             }
             byte value;
-            if (this.largeBuffer == null)
+            if (_largeBuffer == null)
             {
-                var blockAndOffset = this.GetBlockAndRelativeOffset(streamPosition);
-                value = this.blocks[blockAndOffset.Block][blockAndOffset.Offset];
+                var blockAndOffset = GetBlockAndRelativeOffset(streamPosition);
+                value = _blocks[blockAndOffset.Block][blockAndOffset.Offset];
             }
             else
             {
-                value = this.largeBuffer[streamPosition];
+                value = _largeBuffer[streamPosition];
             }
             streamPosition++;
             return value;
@@ -752,20 +708,16 @@ namespace WebSocketSharp.Memory
         /// <exception cref="ObjectDisposedException">Object has been disposed</exception>
         public override void SetLength(long value)
         {
-            this.CheckDisposed();
+            AssertNotDisposed();
             if (value < 0 || value > MaxStreamLength)
-            {
-                throw new ArgumentOutOfRangeException(nameof(value),
-                                                      "value must be non-negative and at most " + MaxStreamLength);
-            }
+                throw new ArgumentOutOfRangeException(
+                    nameof(value), "value must be non-negative and at most " + MaxStreamLength);
 
-            this.EnsureCapacity((int)value);
+            EnsureCapacity((int)value);
 
-            this.length = (int)value;
-            if (this.position > value)
-            {
-                this.position = (int)value;
-            }
+            _length = (int)value;
+            if (_position > value)
+                _position = (int)value;
         }
 
         /// <summary>
@@ -780,7 +732,7 @@ namespace WebSocketSharp.Memory
         /// <exception cref="IOException">Attempt to set negative position</exception>
         public override long Seek(long offset, SeekOrigin loc)
         {
-            this.CheckDisposed();
+            AssertNotDisposed();
             if (offset > MaxStreamLength)
             {
                 throw new ArgumentOutOfRangeException(nameof(offset), "offset cannot be larger than " + MaxStreamLength);
@@ -793,10 +745,10 @@ namespace WebSocketSharp.Memory
                     newPosition = (int)offset;
                     break;
                 case SeekOrigin.Current:
-                    newPosition = (int)offset + this.position;
+                    newPosition = (int)offset + _position;
                     break;
                 case SeekOrigin.End:
-                    newPosition = (int)offset + this.length;
+                    newPosition = (int)offset + _length;
                     break;
                 default:
                     throw new ArgumentException("Invalid seek origin", nameof(loc));
@@ -805,8 +757,8 @@ namespace WebSocketSharp.Memory
             {
                 throw new IOException("Seek before beginning");
             }
-            this.position = newPosition;
-            return this.position;
+            _position = newPosition;
+            return _position;
         }
 
         /// <summary>
@@ -816,66 +768,59 @@ namespace WebSocketSharp.Memory
         /// <remarks>Important: This does a synchronous write, which may not be desired in some situations</remarks>
         public override void WriteTo(Stream stream)
         {
-            this.CheckDisposed();
+            AssertNotDisposed();
             if (stream == null)
-            {
                 throw new ArgumentNullException(nameof(stream));
-            }
 
-            if (this.largeBuffer == null)
+            if (_largeBuffer == null)
             {
                 int currentBlock = 0;
-                int bytesRemaining = this.length;
+                int bytesRemaining = _length;
 
                 while (bytesRemaining > 0)
                 {
-                    int amountToCopy = Math.Min(this.blocks[currentBlock].Length, bytesRemaining);
-                    stream.Write(this.blocks[currentBlock], 0, amountToCopy);
+                    int amountToCopy = Math.Min(_blocks[currentBlock].Length, bytesRemaining);
+                    stream.Write(_blocks[currentBlock], 0, amountToCopy);
 
                     bytesRemaining -= amountToCopy;
-
-                    ++currentBlock;
+                    currentBlock++;
                 }
             }
             else
             {
-                stream.Write(this.largeBuffer, 0, this.length);
+                stream.Write(_largeBuffer, 0, _length);
             }
         }
         #endregion
 
         #region Helper Methods
-        private bool Disposed => Interlocked.Read(ref this.disposedState) != 0;
+        public bool IsDisposed => Interlocked.Read(ref _disposedState) != 0;
 
-        private void CheckDisposed()
+        [DebuggerHidden]
+        private void AssertNotDisposed()
         {
-            if (this.Disposed)
-            {
-                throw new ObjectDisposedException($"The stream with Id {this.id} and Tag {this.tag} is disposed.");
-            }
+            if (IsDisposed)
+                throw new ObjectDisposedException($"The stream with ID {ID} and Tag {Tag} is disposed.");
         }
 
         private int InternalRead(byte[] buffer, int offset, int count, int fromPosition)
         {
-            if (this.length - fromPosition <= 0)
-            {
-                return 0;
-            }
-
+            if (_length - fromPosition <= 0)
+               return 0;
+            
             int amountToCopy;
 
-            if (this.largeBuffer == null)
+            if (_largeBuffer == null)
             {
-                var blockAndOffset = this.GetBlockAndRelativeOffset(fromPosition);
+                var blockAndOffset = GetBlockAndRelativeOffset(fromPosition);
                 int bytesWritten = 0;
-                int bytesRemaining = Math.Min(count, this.length - fromPosition);
+                int bytesRemaining = Math.Min(count, _length - fromPosition);
 
                 while (bytesRemaining > 0)
                 {
-                    amountToCopy = Math.Min(this.blocks[blockAndOffset.Block].Length - blockAndOffset.Offset,
-                                                bytesRemaining);
-                    Buffer.BlockCopy(this.blocks[blockAndOffset.Block], blockAndOffset.Offset, buffer,
-                                     bytesWritten + offset, amountToCopy);
+                    amountToCopy = Math.Min(_blocks[blockAndOffset.Block].Length - blockAndOffset.Offset, bytesRemaining);
+                    Buffer.BlockCopy(
+                        _blocks[blockAndOffset.Block], blockAndOffset.Offset, buffer, bytesWritten + offset, amountToCopy);
 
                     bytesWritten += amountToCopy;
                     bytesRemaining -= amountToCopy;
@@ -885,8 +830,8 @@ namespace WebSocketSharp.Memory
                 }
                 return bytesWritten;
             }
-            amountToCopy = Math.Min(count, this.length - fromPosition);
-            Buffer.BlockCopy(this.largeBuffer, fromPosition, buffer, offset, amountToCopy);
+            amountToCopy = Math.Min(count, _length - fromPosition);
+            Buffer.BlockCopy(_largeBuffer, fromPosition, buffer, offset, amountToCopy);
             return amountToCopy;
         }
 
@@ -934,45 +879,42 @@ namespace WebSocketSharp.Memory
 
             public BlockAndOffset(int block, int offset)
             {
-                this.Block = block;
-                this.Offset = offset;
+                Block = block;
+                Offset = offset;
             }
         }
 
         private BlockAndOffset GetBlockAndRelativeOffset(int offset)
         {
-            var blockSize = this.memoryManager.BlockSize;
+            var blockSize = MemoryManager.BlockSize;
             return new BlockAndOffset(offset / blockSize, offset % blockSize);
         }
 
         private void EnsureCapacity(int newCapacity)
         {
-            if (newCapacity > this.memoryManager.MaximumStreamCapacity && this.memoryManager.MaximumStreamCapacity > 0)
+            if (newCapacity > MemoryManager.MaximumStreamCapacity &&
+                MemoryManager.MaximumStreamCapacity > 0)
             {
-                RecyclableMemoryManager.Events.Writer.MemoryStreamOverCapacity(newCapacity,
-                                                                                    this.memoryManager
-                                                                                        .MaximumStreamCapacity, this.tag,
-                                                                                    this.AllocationStack);
-                throw new InvalidOperationException("Requested capacity is too large: " + newCapacity + ". Limit is " +
-                                                    this.memoryManager.MaximumStreamCapacity);
+                RecyclableMemoryManager.Events.Writer.MemoryStreamOverCapacity(
+                    newCapacity, MemoryManager.MaximumStreamCapacity, Tag, AllocationStack);
+                throw new InvalidOperationException(
+                    "Requested capacity is too large: " + newCapacity + ". Limit is " + MemoryManager.MaximumStreamCapacity);
             }
 
-            if (this.largeBuffer != null)
+            if (_largeBuffer != null)
             {
-                if (newCapacity > this.largeBuffer.Length)
+                if (newCapacity > _largeBuffer.Length)
                 {
-                    var newBuffer = this.memoryManager.GetLargeBuffer(newCapacity, this.tag);
-                    this.InternalRead(newBuffer, 0, this.length, 0);
-                    this.ReleaseLargeBuffer();
-                    this.largeBuffer = newBuffer;
+                    var newBuffer = MemoryManager.GetLargeBuffer(newCapacity, Tag);
+                    InternalRead(newBuffer, 0, _length, 0);
+                    ReleaseLargeBuffer();
+                    _largeBuffer = newBuffer;
                 }
             }
             else
             {
-                while (this.Capacity < newCapacity)
-                {
-                    blocks.Add((this.memoryManager.GetBlock()));
-                }
+                while (Capacity < newCapacity)
+                    _blocks.Add(MemoryManager.GetBlock());
             }
         }
 
@@ -981,21 +923,21 @@ namespace WebSocketSharp.Memory
         /// </summary>
         private void ReleaseLargeBuffer()
         {
-            if (this.memoryManager.AggressiveBufferReturn)
+            if (MemoryManager.AggressiveBufferReturn)
             {
-                this.memoryManager.ReturnLargeBuffer(this.largeBuffer, this.tag);
+                MemoryManager.ReturnLargeBuffer(_largeBuffer, Tag);
             }
             else
             {
-                if (this.dirtyBuffers == null)
+                if (_dirtyBuffers == null)
                 {
                     // We most likely will only ever need space for one
-                    this.dirtyBuffers = new List<byte[]>(1);
+                    _dirtyBuffers = MemoryManager.GetArrayList();
                 }
-                this.dirtyBuffers.Add(this.largeBuffer);
+                _dirtyBuffers.Add(_largeBuffer);
             }
 
-            this.largeBuffer = null;
+            _largeBuffer = null;
         }
         #endregion
     }

@@ -345,7 +345,7 @@ namespace WebSocketSharp.Server
                     return;
                 }
 
-                if (!value.IsToken())
+                if (!value.AsSpan().IsToken())
                     throw new ArgumentException("Not a token.", "value");
 
                 _protocol = value;
@@ -389,7 +389,7 @@ namespace WebSocketSharp.Server
             return null;
         }
 
-        private void OnClose(object sender, CloseEventArgs e)
+        private void OnClose(object sender, CloseEvent e)
         {
             if (_id == null)
                 return;
@@ -398,12 +398,12 @@ namespace WebSocketSharp.Server
             OnClose(e);
         }
 
-        private void OnError(object sender, ErrorEventArgs e)
+        private void OnError(object sender, ErrorEvent e)
         {
             OnError(e);
         }
 
-        private void OnMessage(object sender, MessageEventArgs e)
+        private void OnMessage(object sender, MessageEvent e)
         {
             OnMessage(e);
         }
@@ -545,7 +545,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="reason"/> could not be UTF-8-encoded.
+        ///   <paramref name="reason"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         protected void Close(ushort code, string reason)
@@ -600,7 +600,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="reason"/> could not be UTF-8-encoded.
+        ///   <paramref name="reason"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         protected void Close(CloseStatusCode code, string reason)
@@ -690,7 +690,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="reason"/> could not be UTF-8-encoded.
+        ///   <paramref name="reason"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         protected void CloseAsync(ushort code, string reason)
@@ -747,7 +747,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="reason"/> could not be UTF-8-encoded.
+        ///   <paramref name="reason"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         /// <exception cref="ArgumentOutOfRangeException">
@@ -763,10 +763,10 @@ namespace WebSocketSharp.Server
         /// Called when the WebSocket connection for a session has been closed.
         /// </summary>
         /// <param name="e">
-        /// A <see cref="CloseEventArgs"/> that represents the event data passed
+        /// A <see cref="CloseEvent"/> that represents the event data passed
         /// from a <see cref="WebSocket.OnClose"/> event.
         /// </param>
-        protected virtual void OnClose(CloseEventArgs e)
+        protected virtual void OnClose(CloseEvent e)
         {
         }
 
@@ -774,10 +774,10 @@ namespace WebSocketSharp.Server
         /// Called when the WebSocket instance for a session gets an error.
         /// </summary>
         /// <param name="e">
-        /// A <see cref="ErrorEventArgs"/> that represents the event data passed
+        /// A <see cref="ErrorEvent"/> that represents the event data passed
         /// from a <see cref="WebSocket.OnError"/> event.
         /// </param>
-        protected virtual void OnError(ErrorEventArgs e)
+        protected virtual void OnError(ErrorEvent e)
         {
         }
 
@@ -785,10 +785,10 @@ namespace WebSocketSharp.Server
         /// Called when the WebSocket instance for a session receives a message.
         /// </summary>
         /// <param name="e">
-        /// A <see cref="MessageEventArgs"/> that represents the event data passed
+        /// A <see cref="MessageEvent"/> that represents the event data passed
         /// from a <see cref="WebSocket.OnMessage"/> event.
         /// </param>
-        protected virtual void OnMessage(MessageEventArgs e)
+        protected virtual void OnMessage(MessageEvent e)
         {
         }
 
@@ -818,10 +818,10 @@ namespace WebSocketSharp.Server
         /// <exception cref="ArgumentNullException">
         /// <paramref name="data"/> is <see langword="null"/>.
         /// </exception>
-        protected void Send(byte[] data)
+        protected void Send(MessageFrameType type, byte[] data)
         {
             AssertOpen();
-            _websocket.Send(data);
+            _websocket.Send(type, data);
         }
 
         /// <summary>
@@ -852,10 +852,10 @@ namespace WebSocketSharp.Server
         ///   The file could not be opened.
         ///   </para>
         /// </exception>
-        protected void Send(FileInfo fileInfo)
+        protected void Send(MessageFrameType type, FileInfo fileInfo)
         {
             AssertOpen();
-            _websocket.Send(fileInfo);
+            _websocket.Send(type, fileInfo);
         }
 
         /// <summary>
@@ -871,7 +871,7 @@ namespace WebSocketSharp.Server
         /// <paramref name="data"/> is <see langword="null"/>.
         /// </exception>
         /// <exception cref="ArgumentException">
-        /// <paramref name="data"/> could not be UTF-8-encoded.
+        /// <paramref name="data"/> could not be UTF-8 encoded.
         /// </exception>
         protected void Send(string data)
         {
@@ -917,10 +917,10 @@ namespace WebSocketSharp.Server
         ///   No data could be read from <paramref name="stream"/>.
         ///   </para>
         /// </exception>
-        protected void Send(Stream stream, int length)
+        protected void Send(MessageFrameType type, Stream stream, int length)
         {
             AssertOpen();
-            _websocket.Send(stream, length);
+            _websocket.Send(type, stream, length);
         }
 
         /// <summary>
@@ -952,10 +952,10 @@ namespace WebSocketSharp.Server
         /// <exception cref="ArgumentNullException">
         /// <paramref name="data"/> is <see langword="null"/>.
         /// </exception>
-        protected void SendAsync(byte[] data, Action<bool> completed)
+        protected void SendAsync(MessageFrameType type, byte[] data, Action<bool> completed)
         {
             AssertOpen();
-            _websocket.SendAsync(data, completed);
+            _websocket.SendAsync(type, data, completed);
         }
 
         /// <summary>
@@ -1003,10 +1003,10 @@ namespace WebSocketSharp.Server
         ///   The file could not be opened.
         ///   </para>
         /// </exception>
-        protected void SendAsync(FileInfo fileInfo, Action<bool> completed)
+        protected void SendAsync(MessageFrameType type, FileInfo fileInfo, Action<bool> completed)
         {
             AssertOpen();
-            _websocket.SendAsync(fileInfo, completed);
+            _websocket.SendAsync(type, fileInfo, completed);
         }
 
         /// <summary>
@@ -1039,7 +1039,7 @@ namespace WebSocketSharp.Server
         /// <paramref name="data"/> is <see langword="null"/>.
         /// </exception>
         /// <exception cref="ArgumentException">
-        /// <paramref name="data"/> could not be UTF-8-encoded.
+        /// <paramref name="data"/> could not be UTF-8 encoded.
         /// </exception>
         protected void SendAsync(string data, Action<bool> completed)
         {
@@ -1101,10 +1101,10 @@ namespace WebSocketSharp.Server
         ///   No data could be read from <paramref name="stream"/>.
         ///   </para>
         /// </exception>
-        protected void SendAsync(Stream stream, int length, Action<bool> completed)
+        protected void SendAsync(MessageFrameType type, Stream stream, int length, Action<bool> completed)
         {
             AssertOpen();
-            _websocket.SendAsync(stream, length, completed);
+            _websocket.SendAsync(type, stream, length, completed);
         }
 
         #endregion

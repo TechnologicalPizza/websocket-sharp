@@ -40,6 +40,7 @@
 using System;
 using System.IO;
 using System.Text;
+using WebSocketSharp.Memory;
 
 namespace WebSocketSharp.Net
 {
@@ -47,7 +48,7 @@ namespace WebSocketSharp.Net
     {
         #region Private Fields
 
-        private MemoryStream _body;
+        private RecyclableMemoryStream _body;
         private static readonly byte[] _crlf = new byte[] { 13, 10 };
         private bool _disposed;
         private HttpListenerResponse _response;
@@ -62,7 +63,7 @@ namespace WebSocketSharp.Net
         #region Internal Constructors
 
         internal ResponseStream(
-          Stream stream, HttpListenerResponse response, bool ignoreWriteExceptions)
+            Stream stream, HttpListenerResponse response, bool ignoreWriteExceptions)
         {
             _stream = stream;
             _response = response;
@@ -78,7 +79,7 @@ namespace WebSocketSharp.Net
                 _writeChunked = WriteChunked;
             }
 
-            _body = new MemoryStream();
+            _body = RecyclableMemoryManager.Shared.GetStream();
         }
 
         #endregion
@@ -149,12 +150,12 @@ namespace WebSocketSharp.Net
                 }
             }
 
-            _body = !closing ? new MemoryStream() : null;
+            _body = !closing ? RecyclableMemoryManager.Shared.GetStream() : null;
         }
 
         private bool FlushHeaders()
         {
-            using (var buff = new MemoryStream())
+            using (var buff = RecyclableMemoryManager.Shared.GetStream())
             {
                 var headers = _response.WriteHeadersTo(buff);
                 var start = buff.Position;
@@ -169,7 +170,6 @@ namespace WebSocketSharp.Net
                 _response.CloseConnection = headers["Connection"] == "close";
                 _response.HeadersSent = true;
             }
-
             return true;
         }
 

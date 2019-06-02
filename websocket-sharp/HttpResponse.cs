@@ -30,6 +30,7 @@ using System;
 using System.Collections.Specialized;
 using System.IO;
 using System.Text;
+using WebSocketSharp.Memory;
 using WebSocketSharp.Net;
 
 namespace WebSocketSharp
@@ -163,21 +164,50 @@ namespace WebSocketSharp
                 headers.Add("Set-Cookie", cookie.ToResponseString());
         }
 
+        public override RecyclableMemoryStream ToMemory()
+        {
+            var result = RecyclableMemoryManager.Shared.GetStream();
+            try
+            {
+                var writer = new StreamWriter(result, Encoding.UTF8);
+                writer.Write("HTTP/{0} {1} {2}{3}", ProtocolVersion, _code, _reason, CrLf);
+
+                var headers = Headers;
+                for (int i = 0; i < headers.Count; i++)
+                {
+                    string key = headers.GetKey(i);
+                    writer.Write("{0}: {1}{2}", key, headers[key], CrLf);
+                }
+                writer.Write(CrLf);
+
+                writer.Flush();
+                WriteEntityBody(writer, result);
+
+                writer.Flush();
+                result.Position = 0;
+                return result;
+            }
+            catch
+            {
+                result.Dispose();
+                throw;
+            }
+        }
+
         public override string ToString()
         {
             var output = new StringBuilder(64);
             output.AppendFormat("HTTP/{0} {1} {2}{3}", ProtocolVersion, _code, _reason, CrLf);
 
             var headers = Headers;
-            foreach (var key in headers.AllKeys)
+            for (int i = 0; i < headers.Count; i++)
+            {
+                string key = headers.GetKey(i);
                 output.AppendFormat("{0}: {1}{2}", key, headers[key], CrLf);
+            }
 
             output.Append(CrLf);
-
-            var entity = EntityBody;
-            if (entity.Length > 0)
-                output.Append(entity);
-
+            output.Append(EntityBody);
             return output.ToString();
         }
 

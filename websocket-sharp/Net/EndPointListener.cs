@@ -53,6 +53,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Threading;
 
 namespace WebSocketSharp.Net
@@ -329,7 +330,7 @@ namespace WebSocketSharp.Net
             var host = uri.Host;
             var dns = Uri.CheckHostName(host) == UriHostNameType.Dns;
             var port = uri.Port.ToString();
-            var path = HttpUtility.UrlDecode(uri.AbsolutePath);
+            var path = HttpUtility.UrlDecode(uri.AbsolutePath, Encoding.UTF8);
             var pathSlash = path[path.Length - 1] != '/' ? path + "/" : path;
 
             if (host != null && host.Length > 0)

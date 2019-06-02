@@ -75,7 +75,7 @@ namespace WebSocketSharp
         static PayloadData()
         {
             Empty = new PayloadData();
-            MaxLength = long.MaxValue;
+            MaxLength = int.MaxValue;
         }
 
         #endregion

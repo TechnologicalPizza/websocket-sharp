@@ -39,6 +39,7 @@
 
 using System;
 using System.IO;
+using WebSocketSharp.Memory;
 
 namespace WebSocketSharp.Net
 {
@@ -47,23 +48,24 @@ namespace WebSocketSharp.Net
         #region Private Fields
 
         private long _bodyLeft;
-        private byte[] _buffer;
+        private RecyclableMemoryStream _buffer;
         private int _count;
-        private bool _disposed;
         private int _offset;
         private Stream _stream;
+
+        public bool IsDisposed { get; private set; }
 
         #endregion
 
         #region Internal Constructors
 
-        internal RequestStream(Stream stream, byte[] buffer, int offset, int count)
-          : this(stream, buffer, offset, count, -1)
+        internal RequestStream(Stream stream, RecyclableMemoryStream buffer, int offset, int count)
+            : this(stream, buffer, offset, count, -1)
         {
         }
 
         internal RequestStream(
-          Stream stream, byte[] buffer, int offset, int count, long contentLength)
+            Stream stream, RecyclableMemoryStream buffer, int offset, int count, long contentLength)
         {
             _stream = stream;
             _buffer = buffer;
@@ -126,7 +128,7 @@ namespace WebSocketSharp.Net
             if (_bodyLeft > 0 && count > _bodyLeft)
                 count = (int)_bodyLeft;
 
-            Buffer.BlockCopy(_buffer, _offset, buffer, offset, count);
+            Buffer.BlockCopy(_buffer.GetBuffer(), _offset, buffer, offset, count);
             _offset += count;
             _count -= count;
             if (_bodyLeft > 0)
@@ -140,9 +142,9 @@ namespace WebSocketSharp.Net
         #region Public Methods
 
         public override IAsyncResult BeginRead(
-          byte[] buffer, int offset, int count, AsyncCallback callback, object state)
+            byte[] buffer, int offset, int count, AsyncCallback callback, object state)
         {
-            if (_disposed)
+            if (IsDisposed)
                 throw new ObjectDisposedException(GetType().ToString());
 
             var nread = FillFromBuffer(buffer, offset, count);
@@ -166,19 +168,29 @@ namespace WebSocketSharp.Net
         }
 
         public override IAsyncResult BeginWrite(
-          byte[] buffer, int offset, int count, AsyncCallback callback, object state)
+            byte[] buffer, int offset, int count, AsyncCallback callback, object state)
         {
             throw new NotSupportedException();
         }
 
-        public override void Close()
+        protected override void Dispose(bool disposing)
         {
-            _disposed = true;
+            if (IsDisposed)
+                return;
+
+            if (disposing)
+            {
+                _buffer?.Dispose();
+                _buffer = null;
+            }
+
+            base.Dispose(disposing);
+            IsDisposed = true;
         }
 
         public override int EndRead(IAsyncResult asyncResult)
         {
-            if (_disposed)
+            if (IsDisposed)
                 throw new ObjectDisposedException(GetType().ToString());
 
             if (asyncResult == null)
@@ -211,7 +223,7 @@ namespace WebSocketSharp.Net
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            if (_disposed)
+            if (IsDisposed)
                 throw new ObjectDisposedException(GetType().ToString());
 
             // Call the fillFromBuffer method to check for buffer boundaries even when _bodyLeft is 0.

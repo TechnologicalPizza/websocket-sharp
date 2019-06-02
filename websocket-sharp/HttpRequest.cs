@@ -37,6 +37,7 @@ using System;
 using System.Collections.Specialized;
 using System.IO;
 using System.Text;
+using WebSocketSharp.Memory;
 using WebSocketSharp.Net;
 
 namespace WebSocketSharp
@@ -54,7 +55,7 @@ namespace WebSocketSharp
         #region Private Constructors
 
         private HttpRequest(string method, string uri, Version version, NameValueCollection headers)
-          : base(version, headers)
+            : base(version, headers)
         {
             _method = method;
             _uri = uri;
@@ -143,8 +144,8 @@ namespace WebSocketSharp
 
         internal HttpResponse GetResponse(Stream stream, int millisecondsTimeout)
         {
-            var buff = ToByteArray();
-            stream.Write(buff, 0, buff.Length);
+            using (var tmp = ToMemory())
+                tmp.CopyBytesTo(stream);
 
             return Read(stream, HttpResponse.Parse, millisecondsTimeout);
         }
@@ -177,8 +178,10 @@ namespace WebSocketSharp
             if (cookies == null || cookies.Count == 0)
                 return;
 
+            // TODO: reduce allocs
             var buff = new StringBuilder(64);
-            foreach (var cookie in cookies.GetSorted())
+            var sortedCookies = cookies.GetSorted();
+            foreach (var cookie in sortedCookies)
                 if (!cookie.Expired)
                     buff.AppendFormat("{0}; ", cookie.ToString());
 
@@ -190,21 +193,50 @@ namespace WebSocketSharp
             }
         }
 
+        public override RecyclableMemoryStream ToMemory()
+        {
+            var result = RecyclableMemoryManager.Shared.GetStream();
+            try
+            {
+                var writer = new StreamWriter(result, Encoding.UTF8);
+                writer.Write("{0} {1} HTTP/{2}{3}", _method, _uri, ProtocolVersion, CrLf);
+
+                var headers = Headers;
+                for (int i = 0; i < headers.Count; i++)
+                {
+                    string key = headers.GetKey(i);
+                    writer.Write("{0}: {1}{2}", key, headers[key], CrLf);
+                }
+                writer.Write(CrLf);
+
+                writer.Flush();
+                WriteEntityBody(writer, result);
+
+                result.Position = 0;
+                return result;
+            }
+            catch
+            {
+                result.Dispose();
+                throw;
+            }
+        }
+
+
+
         public override string ToString()
         {
             var output = new StringBuilder(64);
             output.AppendFormat("{0} {1} HTTP/{2}{3}", _method, _uri, ProtocolVersion, CrLf);
-
             var headers = Headers;
-            foreach (var key in headers.AllKeys)
+            for (int i = 0; i < headers.Count; i++)
+            {
+                string key = headers.GetKey(i);
                 output.AppendFormat("{0}: {1}{2}", key, headers[key], CrLf);
+            }
 
             output.Append(CrLf);
-
-            var entity = EntityBody;
-            if (entity.Length > 0)
-                output.Append(entity);
-
+            output.Append(EntityBody);
             return output.ToString();
         }
 

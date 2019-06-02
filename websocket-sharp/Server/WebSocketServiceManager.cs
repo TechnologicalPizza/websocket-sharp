@@ -37,7 +37,7 @@ using WebSocketSharp.Net;
 namespace WebSocketSharp.Server
 {
     /// <summary>
-    /// Provides the management function for the WebSocket services.
+    /// Provides the management function for the services.
     /// </summary>
     /// <remarks>
     /// This class manages the WebSocket services provided by
@@ -53,6 +53,8 @@ namespace WebSocketSharp.Server
         private volatile ServerState _state;
         private object _sync;
         private TimeSpan _waitTime;
+
+        private static readonly char[] _queryFragmentComponents = new[] { '?', '#' };
 
         #endregion
 
@@ -89,7 +91,7 @@ namespace WebSocketSharp.Server
         }
 
         /// <summary>
-        /// Gets the host instances for the WebSocket services.
+        /// Gets the host instances for the services.
         /// </summary>
         /// <value>
         ///   <para>
@@ -100,13 +102,10 @@ namespace WebSocketSharp.Server
         ///   the collection of the host instances.
         ///   </para>
         /// </value>
-        public IEnumerable<WebSocketServiceHost> Hosts
+        public List<WebSocketServiceHost> GetHosts()
         {
-            get
-            {
-                lock (_sync)
-                    return _hosts.Values.ToList();
-            }
+            lock (_sync)
+                return _hosts.Values.ToList();
         }
 
         /// <summary>
@@ -217,7 +216,7 @@ namespace WebSocketSharp.Server
         }
 
         /// <summary>
-        /// Gets the paths for the WebSocket services.
+        /// Gets the paths for the services.
         /// </summary>
         /// <value>
         ///   <para>
@@ -228,13 +227,10 @@ namespace WebSocketSharp.Server
         ///   the collection of the paths.
         ///   </para>
         /// </value>
-        public IEnumerable<string> Paths
+        public List<string> GetPaths()
         {
-            get
-            {
-                lock (_sync)
-                    return _hosts.Keys.ToList();
-            }
+            lock (_sync)
+                return _hosts.Keys.ToList();
         }
 
         /// <summary>
@@ -244,20 +240,19 @@ namespace WebSocketSharp.Server
         /// An <see cref="int"/> that represents the total number of
         /// the sessions in the services.
         /// </value>
-        [Obsolete("This property will be removed.")]
         public int SessionCount
         {
             get
             {
-                var cnt = 0;
-                foreach (var host in Hosts)
+                // TODO: reduce allocs
+                int cnt = 0;
+                var hosts = GetHosts();
+                foreach (var host in hosts)
                 {
                     if (_state != ServerState.Start)
                         break;
-
                     cnt += host.Sessions.Count;
                 }
-
                 return cnt;
             }
         }
@@ -335,7 +330,7 @@ namespace WebSocketSharp.Server
         #region Internal Methods
 
         internal void Add<TBehavior>(string path, Func<TBehavior> creator)
-          where TBehavior : WebSocketBehavior
+            where TBehavior : WebSocketBehavior
         {
             path = path.TrimSlashFromEnd();
 
@@ -344,9 +339,7 @@ namespace WebSocketSharp.Server
                 if (_hosts.TryGetValue(path, out WebSocketServiceHost host))
                     throw new ArgumentException("Already in use.", "path");
 
-                host = new WebSocketServiceHost<TBehavior>(
-                 path, creator, null, _log
-               );
+                host = new WebSocketServiceHost<TBehavior>(path, creator, null, _log);
 
                 if (!_clean)
                     host.KeepClean = false;
@@ -510,6 +503,7 @@ namespace WebSocketSharp.Server
         /// </remarks>
         public void Clear()
         {
+            // TODO: reduce allocs
             List<WebSocketServiceHost> hosts = null;
 
             lock (_sync)
@@ -651,23 +645,21 @@ namespace WebSocketSharp.Server
         public bool TryGetServiceHost(string path, out WebSocketServiceHost host)
         {
             if (path == null)
-                throw new ArgumentNullException("path");
+                throw new ArgumentNullException(nameof(path));
 
             if (path.Length == 0)
-                throw new ArgumentException("An empty string.", "path");
+                throw new ArgumentException("An empty string.", nameof(path));
 
             if (path[0] != '/')
-                throw new ArgumentException("Not an absolute path.", "path");
+                throw new ArgumentException("Not an absolute path.", nameof(path));
 
-            if (path.IndexOfAny(new[] { '?', '#' }) > -1)
-            {
-                var msg = "It includes either or both query and fragment components.";
-                throw new ArgumentException(msg, "path");
-            }
-
+            if (path.IndexOfAny(_queryFragmentComponents) > -1)
+                throw new ArgumentException(
+                    "It includes either or both query and fragment components.", nameof(path));
+            
             return InternalTryGetServiceHost(path, out host);
         }
 
-        #endregion
-    }
+    #endregion
+}
 }

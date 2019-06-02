@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using WebSocketSharp.Memory;
 
 namespace WebSocketSharp.Server
 {
@@ -15,21 +16,34 @@ namespace WebSocketSharp.Server
 
         private static Dictionary<Type, Dictionary<string, HandlerDelegate>> _handlerCache;
         private static Dictionary<Type, Dictionary<string, HandlerDelegate>> _caseInsensitiveHandlerCache;
-        private static JsonSerializer _serializer = new JsonSerializer();
+        private static JsonSerializer _defaultSerializer;
 
         private Dictionary<string, HandlerDelegate> _handlers;
 
         public bool CaseSensitiveCodes { get; }
+        public JsonLoadSettings LoadSettings { get; }
 
         static AttributedWebSocketBehavior()
         {
             _handlerCache = new Dictionary<Type, Dictionary<string, HandlerDelegate>>();
             _caseInsensitiveHandlerCache = new Dictionary<Type, Dictionary<string, HandlerDelegate>>();
+
+            _defaultSerializer = JsonSerializer.Create(new JsonSerializerSettings
+            {
+                NullValueHandling = NullValueHandling.Include,
+                Formatting = Formatting.None
+            });
         }
 
-        public AttributedWebSocketBehavior(bool caseSensitiveCodes)
+        public AttributedWebSocketBehavior(bool caseSensitiveCodes = true, JsonLoadSettings loadSettings = null)
         {
             CaseSensitiveCodes = caseSensitiveCodes;
+            LoadSettings = loadSettings ?? new JsonLoadSettings
+            {
+                CommentHandling = CommentHandling.Ignore,
+                LineInfoHandling = LineInfoHandling.Ignore,
+                DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Replace
+            };
 
             lock (_handlerCache)
             {
@@ -49,10 +63,6 @@ namespace WebSocketSharp.Server
                     }
                 }
             }
-        }
-
-        public AttributedWebSocketBehavior() : this(caseSensitiveCodes: true)
-        {
         }
 
         public static Dictionary<string, HandlerDelegate> CreateMessageHandlers(
@@ -98,27 +108,11 @@ namespace WebSocketSharp.Server
             return false;
         }
 
-        protected void SendAsJson(string key, object body)
-        {
-            AssertOpen();
-
-            var tmp = new StringBuilder();
-            var writer = new StringWriter(tmp);
-            var json = new JsonTextWriter(writer);
-
-            json.WriteStartArray();
-            json.WriteValue(key);
-            _serializer.Serialize(json, body);
-            json.WriteEndArray();
-
-            Send(writer.ToString());
-        }
-
-        protected override void OnMessage(MessageEventArgs e)
+        protected override void OnMessage(MessageEvent e)
         {
             if (e.IsPing)
                 return;
-        
+
             if (!e.IsText)
             {
                 SendError("Only text messages are supported.");
@@ -126,14 +120,28 @@ namespace WebSocketSharp.Server
             }
 
             JArray obj;
+            var reader = RecyclableMemoryManager.Shared.GetReader(e.RawData.Span);
             try
             {
-                obj = JArray.Parse(e.Data);
+                var bs = reader.BaseStream;
+                bs.Position = 0;
+                bs.Write(e.RawData.Span);
+                bs.SetLength(e.RawData.Length);
+
+                bs.Position = 0;
+                reader.DiscardBufferedData();
+
+                using (var json = new JsonTextReader(reader) { CloseInput = false })
+                    obj = JArray.Load(json, LoadSettings);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 SendError(ex.Message);
                 return;
+            }
+            finally
+            {
+                RecyclableMemoryManager.Shared.ReturnReader(reader);
             }
 
             var codeToken = obj[0];
@@ -164,6 +172,30 @@ namespace WebSocketSharp.Server
             {
                 SendError($"Unknown message code '{code}'");
             }
+        }
+
+        protected void SendAsJson(string key, object body, JsonSerializer serializer)
+        {
+            AssertOpen();
+
+            using (var tmp = RecyclableMemoryManager.Shared.GetStream())
+            using (var writer = new StreamWriter(tmp, Encoding.UTF8, 1024))
+            {
+                var json = new JsonTextWriter(writer);
+                json.WriteStartArray();
+                json.WriteValue(key);
+                serializer.Serialize(json, body);
+                json.WriteEndArray();
+                json.Flush();
+
+                tmp.Position = 0;
+                Send(MessageFrameType.Text, tmp, (int)tmp.Length);
+            }
+        }
+
+        protected void SendAsJson(string key, object body)
+        {
+            SendAsJson(key, body, _defaultSerializer);
         }
 
         protected void SendError(string message)

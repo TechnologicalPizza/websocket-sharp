@@ -670,12 +670,11 @@ namespace WebSocketSharp.Server
         public TimeSpan WaitTime
         {
             get => _services.WaitTime;
-
             set => _services.WaitTime = value;
         }
 
         /// <summary>
-        /// Gets the management function for the WebSocket services
+        /// Gets the management function for the services
         /// provided by the server.
         /// </summary>
         /// <value>
@@ -1387,7 +1386,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="reason"/> could not be UTF-8-encoded.
+        ///   <paramref name="reason"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         /// <exception cref="InvalidOperationException">
@@ -1418,7 +1417,7 @@ namespace WebSocketSharp.Server
 
                 if (!reason.TryGetUTF8EncodedBytes(out byte[] bytes))
                 {
-                    var msg = "It could not be UTF-8-encoded.";
+                    var msg = "It could not be UTF-8 encoded.";
                     throw new ArgumentException(msg, "reason");
                 }
 
@@ -1468,7 +1467,7 @@ namespace WebSocketSharp.Server
         ///   -or-
         ///   </para>
         ///   <para>
-        ///   <paramref name="reason"/> could not be UTF-8-encoded.
+        ///   <paramref name="reason"/> could not be UTF-8 encoded.
         ///   </para>
         /// </exception>
         /// <exception cref="ArgumentOutOfRangeException">
@@ -1496,7 +1495,7 @@ namespace WebSocketSharp.Server
 
                 if (!reason.TryGetUTF8EncodedBytes(out byte[] bytes))
                 {
-                    var msg = "It could not be UTF-8-encoded.";
+                    var msg = "It could not be UTF-8 encoded.";
                     throw new ArgumentException(msg, "reason");
                 }
 

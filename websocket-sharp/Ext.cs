@@ -71,6 +71,7 @@ namespace WebSocketSharp
 
         private static readonly byte[] _last = new byte[] { 0x00 };
         private const string _tspecials = "()<>@,;:\\\"/[]?={} \t";
+        private static readonly char[] _absolutionChars = new[] { '?', '#' };
 
         #endregion
 
@@ -78,7 +79,7 @@ namespace WebSocketSharp
 
         private static byte[] Compress(this byte[] data)
         {
-            if (data.LongLength == 0)
+            if (data.Length == 0)
                 //return new byte[] { 0x00, 0x00, 0x00, 0xff, 0xff };
                 return data;
 
@@ -86,21 +87,31 @@ namespace WebSocketSharp
                 return input.CompressToArray();
         }
 
-        private static MemoryStream Compress(this Stream stream)
+        private static RecyclableMemoryStream Compress(this Stream stream)
         {
             var output = RecyclableMemoryManager.Shared.GetStream();
-            if (stream.Length == 0)
-                return output;
-
-            stream.Position = 0;
-            using (var ds = new DeflateStream(output, CompressionMode.Compress, true))
+            try
             {
-                stream.CopyTo(ds, 1024);
-                ds.Close(); // BFINAL set to 1.
-                output.Write(_last, 0, 1);
-                output.Position = 0;
+                if (stream.Length == 0)
+                    return output;
 
-                return output;
+                stream.Position = 0;
+                using (var ds = new DeflateStream(output, CompressionMode.Compress, true))
+                {
+                    stream.CopyBytesTo(ds);
+                    ds.Close();
+                    
+                    // BFINAL set to 1.
+                    output.Write(_last, 0, 1);
+
+                    output.Position = 0;
+                    return output;
+                }
+            }
+            catch
+            {
+                output.Dispose();
+                throw;
             }
         }
 
@@ -113,19 +124,27 @@ namespace WebSocketSharp
             }
         }
 
-        private static MemoryStream Decompress(this Stream stream)
+        private static RecyclableMemoryStream Decompress(this Stream stream)
         {
             var output = RecyclableMemoryManager.Shared.GetStream();
-            if (stream.Length == 0)
-                return output;
-
-            stream.Position = 0;
-            using (var ds = new DeflateStream(stream, CompressionMode.Decompress, true))
+            try
             {
-                ds.CopyBytesTo(output);
-                output.Position = 0;
+                if (stream.Length == 0)
+                    return output;
 
-                return output;
+                stream.Position = 0;
+                using (var ds = new DeflateStream(stream, CompressionMode.Decompress, true))
+                {
+                    ds.CopyBytesTo(output);
+                    output.Position = 0;
+
+                    return output;
+                }
+            }
+            catch
+            {
+                output.Dispose();
+                throw;
             }
         }
 
@@ -148,33 +167,25 @@ namespace WebSocketSharp
                 || value == "POST";
         }
 
-        private static void InternalTimes(this ulong n, Action action)
-        {
-            for (ulong i = 0; i < n; i++)
-                action();
-        }
-
         #endregion
 
         #region Internal Methods
 
         internal static byte[] Append(this ushort code, string reason)
         {
-            byte[] ret = code.ToByteArray(ByteOrder.Big);
+            Span<byte> resultSpan = stackalloc byte[2];
+            resultSpan.Write(code, ByteOrder.Big);
+
             if (reason != null && reason.Length > 0)
             {
-                byte[] rstr = Encoding.UTF8.GetBytes(reason);
-                var buff = new List<byte>(ret.Length + rstr.Length);
+                int strByteCount = Encoding.UTF8.GetByteCount(reason);
+                byte[] byteBuffer = new byte[2 + strByteCount];
+                resultSpan.CopyTo(byteBuffer);
 
-                for (int i = 0; i < ret.Length; i++)
-                    buff.Add(ret[i]);
-
-                for (int i = 0; i < rstr.Length; i++)
-                    buff.Add(rstr[i]);
-
-                ret = buff.ToArray();
+                Encoding.UTF8.GetBytes(reason, 0, reason.Length, byteBuffer, byteIndex: 2);
+                return byteBuffer;
             }
-            return ret;
+            return resultSpan.ToArray();
         }
 
         internal static void Close(this HttpListenerResponse response, HttpStatusCode code)
@@ -184,7 +195,7 @@ namespace WebSocketSharp
         }
 
         internal static void CloseWithAuthChallenge(
-          this HttpListenerResponse response, string challenge)
+            this HttpListenerResponse response, string challenge)
         {
             response.Headers.InternalSet("WWW-Authenticate", challenge, true);
             response.Close(HttpStatusCode.Unauthorized);
@@ -238,13 +249,13 @@ namespace WebSocketSharp
             string value,
             StringComparison comparisonTypeForValue)
         {
-            var val = collection[name];
+            string val = collection[name];
             if (val == null)
                 return false;
 
-            foreach (var elm in val.Split(','))
+            foreach (string elm in val.Split(','))
             {
-                if (elm.Trim().Equals(value, comparisonTypeForValue))
+                if (elm.AsSpan().Trim().Equals(value.AsSpan(), comparisonTypeForValue))
                     return true;
             }
 
@@ -279,7 +290,7 @@ namespace WebSocketSharp
                 if (idx == end)
                     return false;
 
-                var val = values[idx];
+                string val = values[idx];
                 for (var i = idx + 1; i < len; i++)
                 {
                     if (values[i] == val)
@@ -299,50 +310,11 @@ namespace WebSocketSharp
             return dest;
         }
 
-        internal static T[] Copy<T>(this T[] source, long length)
+        internal static T[] Copy<T>(this T[] source, long count)
         {
-            var dest = new T[length];
-            Array.Copy(source, 0, dest, 0, length);
+            var dest = new T[count];
+            Array.Copy(source, 0, dest, 0, count);
             return dest;
-        }
-
-        internal static void CopyToAsync(
-            this Stream source,
-            Stream destination,
-            int bufferLength,
-            Action completed,
-            Action<Exception> error)
-        {
-            var buff = new byte[bufferLength];
-
-            void Callback(IAsyncResult ar)
-            {
-                try
-                {
-                    var nread = source.EndRead(ar);
-                    if (nread <= 0)
-                    {
-                        completed?.Invoke();
-                        return;
-                    }
-
-                    destination.Write(buff, 0, nread);
-                    source.BeginRead(buff, 0, bufferLength, Callback, null);
-                }
-                catch (Exception ex)
-                {
-                    error?.Invoke(ex);
-                }
-            }
-
-            try
-            {
-                source.BeginRead(buff, 0, bufferLength, Callback, null);
-            }
-            catch (Exception ex)
-            {
-                error?.Invoke(ex);
-            }
         }
 
         internal static Stream Decompress(this Stream stream, CompressionMethod method)
@@ -352,7 +324,8 @@ namespace WebSocketSharp
                 : stream;
         }
 
-        internal static Stream Decompress(this ReadOnlySpan<byte> source, CompressionMethod method)
+        internal static RecyclableMemoryStream Decompress(
+            this ReadOnlySpan<byte> source, CompressionMethod method)
         {
             var result = RecyclableMemoryManager.Shared.GetStream();
             try
@@ -424,7 +397,7 @@ namespace WebSocketSharp
             if (original[0] != '/')
                 return null;
 
-            var idx = original.IndexOfAny(new[] { '?', '#' });
+            int idx = original.IndexOfAny(_absolutionChars);
             return idx > 0 ? original.Substring(0, idx) : original;
         }
 
@@ -468,53 +441,6 @@ namespace WebSocketSharp
         }
 
         /// <summary>
-        /// Gets the name from the specified string that contains a pair of
-        /// name and value separated by a character.
-        /// </summary>
-        /// <returns>
-        ///   <para>
-        ///   A <see cref="string"/> that represents the name.
-        ///   </para>
-        ///   <para>
-        ///   <see langword="null"/> if the name is not present.
-        ///   </para>
-        /// </returns>
-        /// <param name="nameAndValue">
-        /// A <see cref="string"/> that contains a pair of name and value.
-        /// </param>
-        /// <param name="separator">
-        /// A <see cref="char"/> used to separate name and value.
-        /// </param>
-        internal static string GetName(this string nameAndValue, char separator)
-        {
-            var idx = nameAndValue.IndexOf(separator);
-            return idx > 0 ? nameAndValue.Substring(0, idx).Trim() : null;
-        }
-
-        /// <summary>
-        /// Gets the value from the specified string that contains a pair of
-        /// name and value separated by a character.
-        /// </summary>
-        /// <returns>
-        ///   <para>
-        ///   A <see cref="string"/> that represents the value.
-        ///   </para>
-        ///   <para>
-        ///   <see langword="null"/> if the value is not present.
-        ///   </para>
-        /// </returns>
-        /// <param name="nameAndValue">
-        /// A <see cref="string"/> that contains a pair of name and value.
-        /// </param>
-        /// <param name="separator">
-        /// A <see cref="char"/> used to separate name and value.
-        /// </param>
-        internal static string GetValue(this string nameAndValue, char separator)
-        {
-            return nameAndValue.GetValue(separator, false);
-        }
-
-        /// <summary>
         /// Gets the value from the specified string that contains a pair of
         /// name and value separated by a character.
         /// </summary>
@@ -536,14 +462,14 @@ namespace WebSocketSharp
         /// A <see cref="bool"/>: <c>true</c> if unquotes the value; otherwise,
         /// <c>false</c>.
         /// </param>
-        internal static string GetValue(
-            this string nameAndValue, char separator, bool unquote)
+        internal static ReadOnlySpan<char> GetValue(
+            this ReadOnlySpan<char> nameAndValue, char separator, bool unquote)
         {
-            var idx = nameAndValue.IndexOf(separator);
+            int idx = nameAndValue.IndexOf(separator);
             if (idx < 0 || idx == nameAndValue.Length - 1)
                 return null;
 
-            var val = nameAndValue.Substring(idx + 1).Trim();
+            var val = nameAndValue.Slice(idx + 1).Trim();
             return unquote ? val.Unquote() : val;
         }
 
@@ -606,7 +532,7 @@ namespace WebSocketSharp
             return Enum.IsDefined(typeof(Opcode), opcode);
         }
 
-        internal static bool IsText(this string value)
+        internal static bool IsText(this ReadOnlySpan<char> value)
         {
             for (var i = 0; i < value.Length; i++)
             {
@@ -636,9 +562,9 @@ namespace WebSocketSharp
             return true;
         }
 
-        internal static bool IsToken(this string value)
+        internal static bool IsToken(this ReadOnlySpan<char> value)
         {
-            foreach (var c in value)
+            foreach (char c in value)
             {
                 if (c < 0x20)
                     return false;
@@ -649,7 +575,6 @@ namespace WebSocketSharp
                 if (_tspecials.IndexOf(c) > -1)
                     return false;
             }
-
             return true;
         }
 
@@ -674,7 +599,7 @@ namespace WebSocketSharp
             return b != -1;
         }
 
-        internal static MemoryStream ReadBytes(this Stream stream, long length)
+        internal static RecyclableMemoryStream ReadBytes(this Stream stream, long length)
         {
             byte[] buffer = RecyclableMemoryManager.Shared.GetBlock();
             var result = RecyclableMemoryManager.Shared.GetStream();
@@ -703,6 +628,27 @@ namespace WebSocketSharp
             }
         }
 
+        internal static bool ReadBytes(
+            this Stream stream, byte[] output, int offset, int count)
+        {
+            if (count > output.Length)
+                throw new ArgumentOutOfRangeException(nameof(count));
+
+            if(offset + count > output.Length)
+                throw new ArgumentOutOfRangeException(nameof(offset));
+
+            while (count > 0)
+            {
+                int read = stream.Read(output, offset, count);
+                if (read == 0)
+                    return false;
+
+                count -= read;
+                offset += read;
+            }
+            return true;
+        }
+
         internal static T[] Reverse<T>(this T[] array)
         {
             var len = array.Length;
@@ -715,6 +661,7 @@ namespace WebSocketSharp
             return ret;
         }
 
+        // TODO: reduce allocs
         internal static IEnumerable<string> SplitHeaderValue(
             this string value, params char[] separators)
         {
@@ -768,7 +715,7 @@ namespace WebSocketSharp
             yield return buff.ToString();
         }
 
-        internal static MemoryStream CopyToMemory(this Stream stream)
+        internal static RecyclableMemoryStream CopyToMemory(this Stream stream)
         {
             var output = RecyclableMemoryManager.Shared.GetStream();
             try
@@ -781,6 +728,41 @@ namespace WebSocketSharp
             {
                 output.Dispose();
                 throw;
+            }
+        }
+
+        internal static RecyclableMemoryStream ToMemory(this StringBuilder builder, Encoding encoding)
+        {
+            char[] charBuffer = RecyclableMemoryManager.Shared.GetCharBlock();
+            byte[] byteBuffer = RecyclableMemoryManager.Shared.GetBlock();
+            var stream = RecyclableMemoryManager.Shared.GetStream();
+            try
+            {
+                int left = builder.Length;
+                int offset = 0;
+                while (left > 0)
+                {
+                    int toCopy = Math.Min(charBuffer.Length, left);
+                    builder.CopyTo(offset, charBuffer, destinationIndex: 0, toCopy);
+
+                    int bytesWritten = encoding.GetBytes(charBuffer, 0, toCopy, byteBuffer, byteIndex: 0);
+                    stream.Write(byteBuffer, 0, bytesWritten);
+
+                    int charsWritten = encoding.GetCharCount(byteBuffer, 0, bytesWritten);
+                    left -= charsWritten;
+                    offset += charsWritten;
+                }
+                return stream;
+            }
+            catch
+            {
+                stream?.Dispose();
+                throw;
+            }
+            finally
+            {
+                RecyclableMemoryManager.Shared.ReturnBlock(byteBuffer);
+                RecyclableMemoryManager.Shared.ReturnBlock(charBuffer);
             }
         }
 
@@ -797,7 +779,6 @@ namespace WebSocketSharp
                 if (method.ToExtensionString() == value)
                     return method;
             }
-
             return CompressionMethod.None;
         }
 
@@ -856,7 +837,7 @@ namespace WebSocketSharp
             return BitConverter.ToUInt64(source.ToHostOrder(sourceOrder), 0);
         }
 
-        internal static IEnumerable<string> Trim(this IEnumerable<string> source)
+        internal static IEnumerable<string> TrimAll(this IEnumerable<string> source)
         {
             if (source is IReadOnlyList<string> list)
             {
@@ -876,10 +857,12 @@ namespace WebSocketSharp
             return ret.Length > 0 ? ret : "/";
         }
 
-        internal static string TrimSlashOrBackslashFromEnd(this string value)
+        private static readonly char[] _slashedEndChars = new [] { '/', '\\' };
+
+        internal static ReadOnlySpan<char> TrimSlashOrBackslashFromEnd(this ReadOnlySpan<char> value)
         {
-            var ret = value.TrimEnd('/', '\\');
-            return ret.Length > 0 ? ret : value[0].ToString();
+            var ret = value.TrimEnd(_slashedEndChars);
+            return ret.Length > 0 ? ret : value.Slice(0, 1);
         }
 
         internal static bool TryCreateVersion(
@@ -1007,20 +990,54 @@ namespace WebSocketSharp
             }
         }
 
-        internal static string Unquote(this string value)
+        internal static StringBuilder Append(this StringBuilder builder, ReadOnlySpan<char> span)
         {
-            var start = value.IndexOf('"');
+            char[] buffer = RecyclableMemoryManager.Shared.GetCharBlock();
+            try
+            {
+                int offset = 0;
+                int left = span.Length;
+                while (left > 0)
+                {
+                    int toAppend = Math.Min(buffer.Length, left);
+                    span.Slice(offset, toAppend).CopyTo(buffer);
+
+                    builder.Append(buffer, 0, toAppend);
+                    offset += toAppend;
+                    left -= toAppend;
+                }
+                return builder;
+            }
+            finally
+            {
+                RecyclableMemoryManager.Shared.ReturnBlock(buffer);
+            }
+        }
+
+        internal static ReadOnlySpan<char> Unquote(this ReadOnlySpan<char> value)
+        {
+            int start = value.IndexOf('"');
             if (start == -1)
                 return value;
 
-            var end = value.LastIndexOf('"');
+            int end = value.LastIndexOf('"');
             if (end == start)
                 return value;
 
-            var len = end - start - 1;
+            int len = end - start - 1;
+
+            ReadOnlySpan<char> Sliced(ReadOnlySpan<char> v)
+            {
+                var sliced = v.Slice(start + 1, len);
+                var builder = new StringBuilder(sliced.Length);
+                builder.Append(sliced);
+                builder.Replace("\\\"", "\"");
+                return builder.ToString().AsSpan();
+            }
+
             return len > 0
-                   ? value.Substring(start + 1, len).Replace("\\\"", "\"")
-                   : string.Empty;
+                   ? Sliced(value)
+                   : string.Empty.AsSpan();
         }
 
         internal static bool Upgrades(
@@ -1028,7 +1045,7 @@ namespace WebSocketSharp
         {
             var comparison = StringComparison.OrdinalIgnoreCase;
             return headers.Contains("Upgrade", protocol, comparison)
-                   && headers.Contains("Connection", "Upgrade", comparison);
+                && headers.Contains("Connection", "Upgrade", comparison);
         }
 
         internal static string UrlDecode(this string value, Encoding encoding)
@@ -1073,8 +1090,39 @@ namespace WebSocketSharp
             }
         }
 
+        public static void Write(this Stream destination, Stream source, long count)
+        {
+            byte[] buffer = RecyclableMemoryManager.Shared.GetBlock();
+            try
+            {
+                while (count > 0)
+                {
+                    int toRead = (int)Math.Min(buffer.Length, count);
+                    int read = source.Read(buffer, 0, toRead);
+                    if (read == 0)
+                        throw new EndOfStreamException();
+
+                    destination.Write(buffer, 0, read);
+                    count -= read;
+                }
+            }
+            finally
+            {
+                RecyclableMemoryManager.Shared.ReturnBlock(buffer);
+            }
+        }
+
         internal static void Write(this Stream stream, ReadOnlySpan<byte> bytes)
         {
+            if (bytes.IsEmpty)
+                return;
+
+            if(bytes.Length == 1)
+            {
+                stream.WriteByte(bytes[0]);
+                return;
+            }
+
             byte[] buffer = RecyclableMemoryManager.Shared.GetBlock();
             try
             {
@@ -1091,25 +1139,6 @@ namespace WebSocketSharp
             {
                 RecyclableMemoryManager.Shared.ReturnBlock(buffer);
             }
-        }
-
-        internal static void WriteBytesAsync(
-            this Stream stream, byte[] bytes, int bufferLength, Action completed, Action<Exception> error)
-        {
-            var input = RecyclableMemoryManager.Shared.GetStream(bytes);
-            input.CopyToAsync(
-                stream,
-                bufferLength,
-                () =>
-                {
-                    completed?.Invoke();
-                    input.Dispose();
-                },
-                ex =>
-                {
-                    input.Dispose();
-                    error?.Invoke(ex);
-                });
         }
 
         #endregion
@@ -1146,12 +1175,11 @@ namespace WebSocketSharp
         /// <param name="e">
         /// A <c>TEventArgs</c> that represents the event data.
         /// </param>
-        /// <typeparam name="TEventArgs">
+        /// <typeparam name="T">
         /// The type of the event data generated by the event.
         /// </typeparam>
-        public static void Emit<TEventArgs>(
-            this EventHandler<TEventArgs> eventHandler, object sender, TEventArgs e)
-            where TEventArgs : EventArgs
+        public static void Emit<T>(
+            this EventHandler<T> eventHandler, object sender, T e)
         {
             eventHandler?.Invoke(sender, e);
         }
@@ -1522,138 +1550,6 @@ namespace WebSocketSharp
         }
 
         /// <summary>
-        /// Executes the specified <see cref="Action"/> delegate <paramref name="n"/> times.
-        /// </summary>
-        /// <param name="n">
-        /// An <see cref="int"/> is the number of times to execute.
-        /// </param>
-        /// <param name="action">
-        /// An <see cref="Action"/> delegate that references the method(s) to execute.
-        /// </param>
-        public static void Times(this int n, Action action)
-        {
-            if (n > 0 && action != null)
-                ((ulong)n).InternalTimes(action);
-        }
-
-        /// <summary>
-        /// Executes the specified <see cref="Action"/> delegate <paramref name="n"/> times.
-        /// </summary>
-        /// <param name="n">
-        /// A <see cref="long"/> is the number of times to execute.
-        /// </param>
-        /// <param name="action">
-        /// An <see cref="Action"/> delegate that references the method(s) to execute.
-        /// </param>
-        public static void Times(this long n, Action action)
-        {
-            if (n > 0 && action != null)
-                ((ulong)n).InternalTimes(action);
-        }
-
-        /// <summary>
-        /// Executes the specified <see cref="Action"/> delegate <paramref name="n"/> times.
-        /// </summary>
-        /// <param name="n">
-        /// A <see cref="uint"/> is the number of times to execute.
-        /// </param>
-        /// <param name="action">
-        /// An <see cref="Action"/> delegate that references the method(s) to execute.
-        /// </param>
-        public static void Times(this uint n, Action action)
-        {
-            if (n > 0 && action != null)
-                ((ulong)n).InternalTimes(action);
-        }
-
-        /// <summary>
-        /// Executes the specified <see cref="Action"/> delegate <paramref name="n"/> times.
-        /// </summary>
-        /// <param name="n">
-        /// A <see cref="ulong"/> is the number of times to execute.
-        /// </param>
-        /// <param name="action">
-        /// An <see cref="Action"/> delegate that references the method(s) to execute.
-        /// </param>
-        public static void Times(this ulong n, Action action)
-        {
-            if (n > 0 && action != null)
-                n.InternalTimes(action);
-        }
-
-        /// <summary>
-        /// Executes the specified <c>Action&lt;int&gt;</c> delegate <paramref name="n"/> times.
-        /// </summary>
-        /// <param name="n">
-        /// An <see cref="int"/> is the number of times to execute.
-        /// </param>
-        /// <param name="action">
-        /// An <c>Action&lt;int&gt;</c> delegate that references the method(s) to execute.
-        /// An <see cref="int"/> parameter to pass to the method(s) is the zero-based count of
-        /// iteration.
-        /// </param>
-        public static void Times(this int n, Action<int> action)
-        {
-            if (n > 0 && action != null)
-                for (int i = 0; i < n; i++)
-                    action(i);
-        }
-
-        /// <summary>
-        /// Executes the specified <c>Action&lt;long&gt;</c> delegate <paramref name="n"/> times.
-        /// </summary>
-        /// <param name="n">
-        /// A <see cref="long"/> is the number of times to execute.
-        /// </param>
-        /// <param name="action">
-        /// An <c>Action&lt;long&gt;</c> delegate that references the method(s) to execute.
-        /// A <see cref="long"/> parameter to pass to the method(s) is the zero-based count of
-        /// iteration.
-        /// </param>
-        public static void Times(this long n, Action<long> action)
-        {
-            if (n > 0 && action != null)
-                for (long i = 0; i < n; i++)
-                    action(i);
-        }
-
-        /// <summary>
-        /// Executes the specified <c>Action&lt;uint&gt;</c> delegate <paramref name="n"/> times.
-        /// </summary>
-        /// <param name="n">
-        /// A <see cref="uint"/> is the number of times to execute.
-        /// </param>
-        /// <param name="action">
-        /// An <c>Action&lt;uint&gt;</c> delegate that references the method(s) to execute.
-        /// A <see cref="uint"/> parameter to pass to the method(s) is the zero-based count of
-        /// iteration.
-        /// </param>
-        public static void Times(this uint n, Action<uint> action)
-        {
-            if (n > 0 && action != null)
-                for (uint i = 0; i < n; i++)
-                    action(i);
-        }
-
-        /// <summary>
-        /// Executes the specified <c>Action&lt;ulong&gt;</c> delegate <paramref name="n"/> times.
-        /// </summary>
-        /// <param name="n">
-        /// A <see cref="ulong"/> is the number of times to execute.
-        /// </param>
-        /// <param name="action">
-        /// An <c>Action&lt;ulong&gt;</c> delegate that references the method(s) to execute.
-        /// A <see cref="ulong"/> parameter to pass to this method(s) is the zero-based count of
-        /// iteration.
-        /// </param>
-        public static void Times(this ulong n, Action<ulong> action)
-        {
-            if (n > 0 && action != null)
-                for (ulong i = 0; i < n; i++)
-                    action(i);
-        }
-
-        /// <summary>
         /// Converts the specified array of <see cref="byte"/> to the specified type data.
         /// </summary>
         /// <returns>
@@ -1735,6 +1631,45 @@ namespace WebSocketSharp
                 }
                 else
                     return Array.Empty<byte>();
+            }
+        }
+
+        /// <summary>
+        /// Converts the specified <paramref name="value"/> to an array of <see cref="byte"/>.
+        /// </summary>
+        /// <param name="value">
+        /// A T to convert.
+        /// </param>
+        /// <param name="order">
+        /// One of the <see cref="ByteOrder"/> enum values, specifies the byte order of the return.
+        /// </param>
+        /// <typeparam name="T">
+        /// The type of <paramref name="value"/>.
+        /// </typeparam>
+        /// <returns>
+        /// An array of <see cref="byte"/> converted from <paramref name="value"/>.
+        /// </returns>
+        public static Stream ToMemory<T>(this T value, ByteOrder order)
+            where T : unmanaged
+        {
+            unsafe
+            {
+                int size = sizeof(T);
+                if (size > 0)
+                {
+                    byte* tmp = stackalloc byte[size];
+                    *((T*)tmp) = value;
+
+                    var data = new Span<byte>(tmp, size);
+                    if (!order.IsHostOrder())
+                        data.Reverse();
+
+                    var stream = RecyclableMemoryManager.Shared.GetStream();
+                    stream.Write(data);
+                    return stream;
+                }
+                else
+                    return Stream.Null;
             }
         }
 
@@ -1840,6 +1775,12 @@ namespace WebSocketSharp
             return buff.ToString();
         }
 
+        public static int ParseInt32(this ReadOnlySpan<char> span)
+        {
+            // TODO: reduce allocs
+            return int.Parse(span.ToString());
+        }
+
         /// <summary>
         /// Converts the specified string to a <see cref="Uri"/>.
         /// </summary>
@@ -1858,6 +1799,19 @@ namespace WebSocketSharp
         {
             Uri.TryCreate(value, value.MaybeUri() ? UriKind.Absolute : UriKind.Relative, out Uri ret);
             return ret;
+        }
+        /// <summary>
+        /// Converts the specified string to a <see cref="Uri"/>.
+        /// </summary>
+        /// <returns>
+        ///   <para>A <see cref="Uri"/> converted from <paramref name="value"/>.</para>
+        ///   <para><see langword="null"/> if the conversion has failed.</para>
+        /// </returns>
+        /// <param name="span">A <see cref="ReadOnlySpan{char}"/> to convert.</param>
+        public static Uri ToUri(this ReadOnlySpan<char> span)
+        {
+            // TODO: reduce allocs
+            return ToUri(span.ToString());
         }
 
         /// <summary>
@@ -1900,7 +1854,7 @@ namespace WebSocketSharp
             response.ContentLength64 = len;
             var output = response.OutputStream;
 
-            output.Write(content, 0, (int)len);
+            output.Write(content, 0, len);
             output.Close();
         }
 
