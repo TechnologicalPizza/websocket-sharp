@@ -112,7 +112,7 @@ namespace WebSocketSharp
       var headerAndCaller =
         string.Format ("{0}{1}.{2}:{3}|", header, type.Name, method.Name, lineNum);
 #else
-      var headerAndCaller = String.Format ("{0}{1}.{2}|", header, type.Name, method.Name);
+      var headerAndCaller = string.Format ("{0}{1}.{2}|", header, type.Name, method.Name);
 #endif
       var msgs = _message.Replace ("\r\n", "\n").TrimEnd ('\n').Split ('\n');
       if (msgs.Length <= 1)

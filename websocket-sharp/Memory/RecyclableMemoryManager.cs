@@ -457,7 +457,7 @@ namespace WebSocketSharp.Memory
             if (!IsLargeBufferSize(buffer.Length))
             {
                 throw new ArgumentException(
-                    String.Format("buffer did not originate from this memory manager. The size is not {0} of ",
+                    string.Format("buffer did not originate from this memory manager. The size is not {0} of ",
                                   useExponentialLargeBuffer ? "an exponential" : "a multiple") +
                     largeBufferMultiple);
             }

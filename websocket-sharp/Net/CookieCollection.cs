@@ -60,6 +60,9 @@ namespace WebSocketSharp.Net
         private bool _readOnly;
         private object _syncRoot;
 
+        private static readonly string[] ExpireDateFormat = new[] { "ddd, dd'-'MMM'-'yyyy HH':'mm':'ss 'GMT'", "r" };
+        private static readonly CultureInfo enUS_Culture = CultureInfo.CreateSpecificCulture("en-US");
+
         #endregion
 
         #region Public Constructors
@@ -131,7 +134,7 @@ namespace WebSocketSharp.Net
         /// <paramref name="index"/> is out of allowable range for the collection.
         /// </exception>
         public Cookie this[int index] => _list[index];
-        
+
         /// <summary>
         /// Gets the cookie with the specified name from the collection.
         /// </summary>
@@ -208,8 +211,8 @@ namespace WebSocketSharp.Net
             var caseInsensitive = StringComparison.InvariantCultureIgnoreCase;
             var pairs = value.SplitHeaderValue(',', ';');
 
-            foreach(var rawPair in pairs)
-            { 
+            foreach (var rawPair in pairs)
+            {
                 var pair = rawPair.AsSpan().Trim();
                 if (pair.Length == 0)
                     continue;
@@ -242,7 +245,13 @@ namespace WebSocketSharp.Net
 
                 if (name.Equals("$version", caseInsensitive))
                 {
-                    ver = val.Length > 0 ? val.AsSpan().Unquote().ParseInt32() : 0;
+                    if (val.Length == 0)
+                        continue;
+
+                    if (!int.TryParse(val.AsSpan().Unquote().ToString(), out int num))
+                        continue;
+
+                    ver = num;
                     continue;
                 }
 
@@ -363,7 +372,10 @@ namespace WebSocketSharp.Net
                     if (val.Length == 0)
                         continue;
 
-                    cookie.Version = val.AsSpan().Unquote().ParseInt32();
+                    if (!int.TryParse(val.AsSpan().Unquote().ToString(), out int num))
+                        continue;
+
+                    cookie.Version = num;
                     continue;
                 }
 
@@ -386,17 +398,13 @@ namespace WebSocketSharp.Net
                     var buff = new StringBuilder(val, 32);
                     buff.AppendFormat(", {0}", pairs[i].Trim());
 
-                    if (
-                      !DateTime.TryParseExact(
+                    if (!DateTime.TryParseExact(
                         buff.ToString(),
-                        new[] { "ddd, dd'-'MMM'-'yyyy HH':'mm':'ss 'GMT'", "r" },
-                        CultureInfo.CreateSpecificCulture("en-US"),
-                        DateTimeStyles.AdjustToUniversal
-                        | DateTimeStyles.AssumeUniversal,
-                        out DateTime expires
-                      )
-                    )
-                        expires = DateTime.Now;
+                        ExpireDateFormat,
+                        enUS_Culture,
+                        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
+                        out DateTime expires))
+                        continue;
 
                     cookie.Expires = expires.ToLocalTime();
                     continue;
@@ -410,10 +418,10 @@ namespace WebSocketSharp.Net
                     if (val.Length == 0)
                         continue;
 
-                    var max = val.AsSpan().Unquote().ParseInt32();
-                    var expires = DateTime.Now.AddSeconds(max);
-                    cookie.Expires = expires;
+                    if (!int.TryParse(val.AsSpan().Unquote().ToString(), out int num))
+                        continue;
 
+                    cookie.MaxAge = num;
                     continue;
                 }
 
@@ -630,7 +638,7 @@ namespace WebSocketSharp.Net
 
             if (cookies == null)
                 throw new ArgumentNullException(nameof(cookies));
-            
+
             if (cookies is IReadOnlyList<Cookie> list)
             {
                 for (int i = 0; i < list.Count; i++)
@@ -708,7 +716,7 @@ namespace WebSocketSharp.Net
 
             if (array.Length - index < _list.Count)
                 throw new ArgumentException("The available space of the array is not enough to copy to.");
-            
+
             _list.CopyTo(array, index);
         }
 

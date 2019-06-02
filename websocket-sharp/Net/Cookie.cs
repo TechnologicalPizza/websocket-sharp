@@ -338,6 +338,13 @@ namespace WebSocketSharp.Net
                        ? (int)span.TotalSeconds
                        : 0;
             }
+
+            set
+            {
+                _expires = value > 0
+                           ? DateTime.Now.AddSeconds((double)value)
+                           : DateTime.Now;
+            }
         }
 
         internal int[] Ports => _ports ?? _emptyPorts;
@@ -585,17 +592,8 @@ namespace WebSocketSharp.Net
 
             internal set
             {
-                if (!value.IsEnclosedIn('"'))
-                {
-                    var msg = "It is not enclosed in double quotes.";
-                    throw new ArgumentException(msg, "value");
-                }
-
                 if (!TryCreatePorts(value, out int[] ports))
-                {
-                    var msg = "It could not be parsed.";
-                    throw new ArgumentException(msg, "value");
-                }
+                    return;
 
                 _port = value;
                 _ports = ports;
@@ -689,10 +687,7 @@ namespace WebSocketSharp.Net
             internal set
             {
                 if (value < 0 || value > 1)
-                {
-                    var msg = "It is not allowed.";
-                    throw new ArgumentOutOfRangeException("value", msg);
-                }
+                    return;
 
                 _version = value;
             }
@@ -769,7 +764,7 @@ namespace WebSocketSharp.Net
             if (!_domain.IsNullOrEmpty())
                 buff.AppendFormat("; Domain={0}", _domain);
 
-            if (!_port.IsNullOrEmpty())
+            if (_port != null)
             {
                 if (_port != "\"\"")
                     buff.AppendFormat("; Port={0}", _port);
@@ -861,7 +856,7 @@ namespace WebSocketSharp.Net
                     buff.AppendFormat("; $Domain={0}", _domain);
             }
 
-            if (!_port.IsNullOrEmpty())
+            if (_port != null)
             {
                 if (_port != "\"\"")
                     buff.AppendFormat("; $Port={0}", _port);
