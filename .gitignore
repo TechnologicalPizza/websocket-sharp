@@ -1,10 +1,11 @@
 ## Ignore build results and temporary files.
 
+.vs/
+
 Backup*
 _UpgradeReport_Files
 bin
 obj
-.vs/
 
 *.mdb
 *.pdb
