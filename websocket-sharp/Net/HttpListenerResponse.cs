@@ -335,7 +335,7 @@ namespace WebSocketSharp.Net
                     return;
                 }
 
-                if (!value.MaybeUri() || !Uri.TryCreate(value, UriKind.Absolute, out _))
+                if (!value.AsSpan().MaybeUri() || !Uri.TryCreate(value, UriKind.Absolute, out _))
                     throw new ArgumentException("Not an absolute URL.", nameof(value));
 
                 _location = value;
@@ -807,10 +807,10 @@ namespace WebSocketSharp.Net
         {
             AssertNotDisposedOrHeadersSent();
             if (url == null)
-                throw new ArgumentNullException("url");
+                throw new ArgumentNullException(nameof(url));
 
-            if (!url.MaybeUri() || !Uri.TryCreate(url, UriKind.Absolute, out _))
-                throw new ArgumentException("Not an absolute URL.", "url");
+            if (!url.AsSpan().MaybeUri() || !Uri.TryCreate(url, UriKind.Absolute, out _))
+                throw new ArgumentException("Not an absolute URL.", nameof(url));
 
             _location = url;
             _statusCode = 302;

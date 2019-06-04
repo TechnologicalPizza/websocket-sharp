@@ -92,7 +92,7 @@ namespace WebSocketSharp
         private object _forState;
         private RecyclableMemoryStream _fragmentsBuffer;
         private bool _fragmentsCompressed;
-        private Opcode _fragmentsOpcode;
+        private OpCode _fragmentsOpcode;
         private const string _guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
         private Func<WebSocketContext, string> _handshakeRequestChecker;
         private bool _ignoreExtensions;
@@ -1102,7 +1102,7 @@ namespace WebSocketSharp
         {
             Action<PayloadData, bool, bool, bool> closer = InternalClose;
             closer.BeginInvoke(
-              payloadData, send, receive, received, closer.EndInvoke, null);
+                payloadData, send, receive, received, closer.EndInvoke, null);
         }
 
         private bool CloseHandshake(
@@ -1113,13 +1113,9 @@ namespace WebSocketSharp
             {
                 var frame = WebSocketFrame.CreateCloseFrame(payloadData, _isClient);
                 sent = SendBytes(frame);
-
-                if (_isClient)
-                    frame.Unmask();
             }
 
-            var wait = !received && sent && receive && _receivingExited != null;
-            if (wait)
+            if (!received && sent && receive && _receivingExited != null)
                 received = _receivingExited.WaitOne(_waitTime);
 
             bool ret = sent && received;
@@ -1479,7 +1475,7 @@ namespace WebSocketSharp
                 try
                 {
                     pongReceived.Reset();
-                    if (!InternalSend(Fin.Final, Opcode.Ping, data, false))
+                    if (!InternalSend(Fin.Final, OpCode.Ping, data, false))
                         return false;
 
                     return pongReceived.WaitOne(_waitTime);
@@ -1791,7 +1787,7 @@ namespace WebSocketSharp
             _context = null;
         }
 
-        private bool InternalSend(Opcode opcode, Stream stream)
+        private bool InternalSend(OpCode opcode, Stream stream)
         {
             lock (_forSend)
             {
@@ -1826,7 +1822,7 @@ namespace WebSocketSharp
             }
         }
 
-        private bool InternalSend(Opcode opcode, Stream stream, bool compressed)
+        private bool InternalSend(OpCode opcode, Stream stream, bool compressed)
         {
             var len = stream.Length;
             if (len == 0)
@@ -1864,7 +1860,7 @@ namespace WebSocketSharp
             for (long i = 0; i < n; i++)
             {
                 sent = stream.Read(buff, 0, FragmentLength) == FragmentLength
-                       && InternalSend(Fin.More, Opcode.Cont, buff, false);
+                       && InternalSend(Fin.More, OpCode.Cont, buff, false);
 
                 if (!sent)
                     return false;
@@ -1877,10 +1873,10 @@ namespace WebSocketSharp
                 buff = new byte[rem];
 
             return stream.Read(buff, 0, rem) == rem
-                   && InternalSend(Fin.Final, Opcode.Cont, buff, false);
+                   && InternalSend(Fin.Final, OpCode.Cont, buff, false);
         }
 
-        private bool InternalSend(Fin fin, Opcode opcode, byte[] data, bool compressed)
+        private bool InternalSend(Fin fin, OpCode opcode, byte[] data, bool compressed)
         {
             lock (_forState)
             {
@@ -1895,9 +1891,9 @@ namespace WebSocketSharp
             }
         }
 
-        private void InternalSendAsync(Opcode opcode, Stream stream, Action<bool> completed)
+        private void InternalSendAsync(OpCode opcode, Stream stream, Action<bool> completed)
         {
-            Func<Opcode, Stream, bool> sender = InternalSend;
+            Func<OpCode, Stream, bool> sender = InternalSend;
             sender.BeginInvoke(
                 opcode,
                 stream,
@@ -2474,7 +2470,7 @@ namespace WebSocketSharp
 
         // As server
         internal void Send(
-            Opcode opcode, byte[] data, Dictionary<CompressionMethod, Stream> cache)
+            OpCode opcode, byte[] data, Dictionary<CompressionMethod, Stream> cache)
         {
             lock (_forSend)
             {
@@ -2506,7 +2502,7 @@ namespace WebSocketSharp
 
         // As server
         internal void Send(
-            Opcode opcode, Stream stream, Dictionary<CompressionMethod, Stream> cache)
+            OpCode opcode, Stream stream, Dictionary<CompressionMethod, Stream> cache)
         {
             lock (_forSend)
             {
@@ -2523,9 +2519,9 @@ namespace WebSocketSharp
             }
         }
         
-        internal static Opcode GetOpCode(MessageFrameType type)
+        internal static OpCode GetOpCode(MessageFrameType type)
         {
-            return type == MessageFrameType.Text ? Opcode.Text : Opcode.Binary;
+            return type == MessageFrameType.Text ? OpCode.Text : OpCode.Binary;
         }
 
         #endregion
@@ -3347,7 +3343,7 @@ namespace WebSocketSharp
                 writer.Write(text);
                 writer.Flush();
                 tmp.Position = 0;
-                InternalSend(Opcode.Text, tmp);
+                InternalSend(OpCode.Text, tmp);
             }
         }
 
@@ -3392,7 +3388,7 @@ namespace WebSocketSharp
         {
             AssertOpen();
             AssertValidStream(stream, length, out var bytes);            
-            InternalSend(type == MessageFrameType.Text ? Opcode.Text : Opcode.Binary, bytes);
+            InternalSend(type == MessageFrameType.Text ? OpCode.Text : OpCode.Binary, bytes);
         }
 
         /// <summary>
@@ -3522,7 +3518,7 @@ namespace WebSocketSharp
                 writer.Write(text);
                 writer.Flush();
                 tmp.Position = 0;
-                InternalSendAsync(Opcode.Text, tmp, completed);
+                InternalSendAsync(OpCode.Text, tmp, completed);
             }
         }
 

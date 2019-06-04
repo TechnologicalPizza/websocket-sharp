@@ -5,11 +5,11 @@ namespace WebSocketSharp.Server
     [AttributeUsage(AttributeTargets.Method, Inherited = false)]
     public sealed class MessageHandlerAttribute : Attribute
     {
-        public string Name { get; }
+        public int Code { get; set; }
+        public string Name { get; set; }
 
-        public MessageHandlerAttribute(string name = null)
+        public MessageHandlerAttribute()
         {
-            Name = name;
         }
     }
 }

@@ -80,11 +80,11 @@ namespace WebSocketSharp
                 if (EntityBodyData == null || EntityBodyData.Length == 0)
                     return string.Empty;
 
-                Encoding enc = GetContentTypeEncoding();
+                Encoding encoding = GetContentTypeEncoding() ?? Encoding.UTF8;
 
                 string body;
                 using (var reader = new StreamReader(
-                    EntityBodyData, enc ?? Encoding.UTF8, false, 1024, leaveOpen: true))
+                    EntityBodyData, encoding, false, 1024, leaveOpen: true))
                     body = reader.ReadToEnd();
 
                 EntityBodyData.Position = 0;

@@ -205,7 +205,7 @@ namespace WebSocketSharp
                 if (_level > level)
                     return;
 
-                LogData data = null;
+                LogData data;
                 try
                 {
                     data = new LogData(level, new StackFrame(2, true), message);

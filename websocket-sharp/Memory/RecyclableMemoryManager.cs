@@ -671,18 +671,17 @@ namespace WebSocketSharp.Memory
 
             if(reader == null)
                 reader = new StreamReader(GetStream());
+            else
+                reader.DiscardBufferedData();
 
             var bs = reader.BaseStream as RecyclableMemoryStream;
             bs.Position = 0;
 
+            bs.SetLength(data.Length);
             if (!data.IsEmpty)
-            {
                 bs.Write(data);
-                bs.SetLength(data.Length);
-                bs.Position = 0;
-            }
 
-            reader.DiscardBufferedData();
+            bs.Position = 0;
             return reader;
         }
 

@@ -14,19 +14,17 @@ namespace WebSocketSharp.Server
     {
         public delegate void HandlerDelegate(AttributedWebSocketBehavior behavior, JToken body);
 
-        private static Dictionary<Type, Dictionary<string, HandlerDelegate>> _handlerCache;
-        private static Dictionary<Type, Dictionary<string, HandlerDelegate>> _caseInsensitiveHandlerCache;
+        private static Dictionary<Type, HandlerCollection> _handlerCache;
         private static JsonSerializer _defaultSerializer;
 
-        private Dictionary<string, HandlerDelegate> _handlers;
+        private HandlerCollection _handlers;
 
         public bool CaseSensitiveCodes { get; }
         public JsonLoadSettings LoadSettings { get; }
 
         static AttributedWebSocketBehavior()
         {
-            _handlerCache = new Dictionary<Type, Dictionary<string, HandlerDelegate>>();
-            _caseInsensitiveHandlerCache = new Dictionary<Type, Dictionary<string, HandlerDelegate>>();
+            _handlerCache = new Dictionary<Type, HandlerCollection>();
 
             _defaultSerializer = JsonSerializer.Create(new JsonSerializerSettings
             {
@@ -50,28 +48,18 @@ namespace WebSocketSharp.Server
                 Type type = GetType();
                 if (!_handlerCache.TryGetValue(type, out _handlers))
                 {
-                    _handlers = CreateMessageHandlers(type, StringComparer.Ordinal);
+                    _handlers = CreateMessageHandlers(type);
                     _handlerCache.Add(type, _handlers);
-                }
-
-                if (!CaseSensitiveCodes)
-                {
-                    if (!_caseInsensitiveHandlerCache.TryGetValue(type, out _handlers))
-                    {
-                        _handlers = CreateMessageHandlers(type, StringComparer.OrdinalIgnoreCase);
-                        _caseInsensitiveHandlerCache.Add(type, _handlers);
-                    }
                 }
             }
         }
 
-        public static Dictionary<string, HandlerDelegate> CreateMessageHandlers(
-            Type type, IEqualityComparer<string> comparer)
+        public static HandlerCollection CreateMessageHandlers(Type type)
         {
             // TODO: consider finding public properties and returning
             // a serialized version of the value returned by the getter
 
-            var handlers = new Dictionary<string, HandlerDelegate>(comparer);
+            var collection = new HandlerCollection();
             var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             foreach (var method in methods)
             {
@@ -92,9 +80,12 @@ namespace WebSocketSharp.Server
 
                 // lambda visualized: (target, message) => ((type)target).Invoke(message)
                 var handler = Expression.Lambda<HandlerDelegate>(call, targetBase, message).Compile();
-                handlers.Add(name, handler);
+
+                collection.Add(name, handler);
+                if (attrib.Code != -1)
+                    collection.Add(attrib.Code, handler);
             }
-            return handlers;
+            return collection;
         }
 
         protected bool Missing(JToken token, string name, out JToken value)
@@ -123,14 +114,6 @@ namespace WebSocketSharp.Server
             var reader = RecyclableMemoryManager.Shared.GetReader(e.RawData.Span);
             try
             {
-                var bs = reader.BaseStream;
-                bs.Position = 0;
-                bs.Write(e.RawData.Span);
-                bs.SetLength(e.RawData.Length);
-
-                bs.Position = 0;
-                reader.DiscardBufferedData();
-
                 using (var json = new JsonTextReader(reader) { CloseInput = false })
                     obj = JArray.Load(json, LoadSettings);
             }
@@ -150,11 +133,6 @@ namespace WebSocketSharp.Server
                 SendError($"Message code missing.");
                 return;
             }
-            if (codeToken.Type != JTokenType.String)
-            {
-                SendError("Message code must be of type String.");
-                return;
-            }
 
             var bodyToken = obj[1];
             if (bodyToken == null)
@@ -163,14 +141,43 @@ namespace WebSocketSharp.Server
                 return;
             }
 
-            string code = codeToken.ToObject<string>();
-            if (_handlers.TryGetValue(code, out var handler))
+            void SendError_UnknownCode(string code) => SendError($"Unknown message code '{code}'");
+        
+            switch (codeToken.Type)
             {
-                handler.Invoke(this, bodyToken);
-            }
-            else
-            {
-                SendError($"Unknown message code '{code}'");
+                case JTokenType.String:
+                {
+                    var named = CaseSensitiveCodes ? _handlers.Named : _handlers.NamedIgnoreCase;
+                    string code = codeToken.ToObject<string>();
+                    if (named.TryGetValue(code, out var handler))
+                    {
+                        handler.Invoke(this, bodyToken);
+                        break;
+                    }
+                    SendError_UnknownCode(code);
+                    break;
+                }
+
+                case JTokenType.Integer:
+                {
+                    int code = codeToken.ToObject<int>();
+                    if(code == -1)
+                    {
+                        SendError("Message code '-1' is reserved.");
+                        break;
+                    }
+                    if (_handlers.Coded.TryGetValue(code, out var handler))
+                    {
+                        handler.Invoke(this, bodyToken);
+                        break;
+                    }
+                    SendError_UnknownCode(code.ToString());
+                    break;
+                }
+
+                default:
+                    SendError($"Message code must be of type String or Integer.");
+                    break;
             }
         }
 
@@ -201,6 +208,33 @@ namespace WebSocketSharp.Server
         protected void SendError(string message)
         {
             SendAsJson("error", message);
+        }
+
+        public class HandlerCollection
+        {
+            public Dictionary<int, HandlerDelegate> Coded { get; }
+            public Dictionary<string, HandlerDelegate> Named { get; }
+            public Dictionary<string, HandlerDelegate> NamedIgnoreCase { get; }
+
+            public HandlerCollection()
+            {
+                Coded = new Dictionary<int, HandlerDelegate>();
+                Named = new Dictionary<string, HandlerDelegate>(StringComparer.Ordinal);
+                NamedIgnoreCase = new Dictionary<string, HandlerDelegate>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            public void Add(int code, HandlerDelegate handler)
+            {
+                Coded.Add(code, handler);
+            }
+
+            public void Add(string code, HandlerDelegate handler)
+            {
+                if (NamedIgnoreCase.ContainsKey(code))
+                    throw new ArgumentException();
+                Named.Add(code, handler);
+                NamedIgnoreCase.Add(code, handler);
+            }
         }
     }
 }

@@ -737,7 +737,7 @@ namespace WebSocketSharp.Net
             {
                 path = requestUri;
             }
-            else if (requestUri.MaybeUri())
+            else if (requestUri.AsSpan().MaybeUri())
             {
                 if (!Uri.TryCreate(requestUri, UriKind.Absolute, out Uri uri))
                     return null;

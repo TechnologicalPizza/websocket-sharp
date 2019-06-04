@@ -484,9 +484,9 @@ namespace WebSocketSharp
             return opcode > 0x7 && opcode < 0x10;
         }
 
-        internal static bool IsControl(this Opcode opcode)
+        internal static bool IsControl(this OpCode opcode)
         {
-            return opcode >= Opcode.Close;
+            return opcode >= OpCode.Close;
         }
 
         internal static bool IsData(this byte opcode)
@@ -494,9 +494,9 @@ namespace WebSocketSharp
             return opcode == 0x1 || opcode == 0x2;
         }
 
-        internal static bool IsData(this Opcode opcode)
+        internal static bool IsData(this OpCode opcode)
         {
-            return opcode == Opcode.Text || opcode == Opcode.Binary;
+            return opcode == OpCode.Text || opcode == OpCode.Binary;
         }
 
         internal static bool IsHttpMethod(this string value, Version version)
@@ -529,7 +529,7 @@ namespace WebSocketSharp
 
         internal static bool IsSupported(this byte opcode)
         {
-            return Enum.IsDefined(typeof(Opcode), opcode);
+            return Enum.IsDefined(typeof(OpCode), opcode);
         }
 
         internal static bool IsText(this ReadOnlySpan<char> value)
@@ -1070,6 +1070,18 @@ namespace WebSocketSharp
             }
         }
 
+        internal static string UTF8Decode(this byte[] bytes, int index, int count)
+        {
+            try
+            {
+                return Encoding.UTF8.GetString(bytes, index, count);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         internal static byte[] UTF8Encode(this string s)
         {
             return Encoding.UTF8.GetBytes(s);
@@ -1414,32 +1426,33 @@ namespace WebSocketSharp
         /// <param name="value">
         /// A <see cref="string"/> to test.
         /// </param>
-        public static bool IsPredefinedScheme(this string value)
+        public static bool IsPredefinedScheme(this ReadOnlySpan<Char> value)
         {
-            if (value == null || value.Length < 2)
+            if (value.Length < 2)
                 return false;
 
+            var sc = StringComparison.Ordinal;
             char c = value[0];
             if (c == 'h')
-                return value == "http" || value == "https";
+                return value.Equals("http".AsSpan(), sc) || value.Equals("https".AsSpan(), sc);
 
             if (c == 'w')
-                return value == "ws" || value == "wss";
+                return value.Equals("ws".AsSpan(), sc) || value.Equals("wss".AsSpan(), sc);
 
             if (c == 'f')
-                return value == "file" || value == "ftp";
+                return value.Equals("file".AsSpan(), sc) || value.Equals("ftp".AsSpan(), sc);
 
             if (c == 'g')
-                return value == "gopher";
+                return value.Equals("gopher".AsSpan(), sc);
 
             if (c == 'm')
-                return value == "mailto";
+                return value.Equals("mailto".AsSpan(), sc);
 
             if (c == 'n')
             {
                 return value[1] == 'e' // second char
-                    ? value == "news" || value == "net.pipe" || value == "net.tcp"
-                    : value == "nntp";
+                    ? value.Equals("news".AsSpan(), sc) || value.Equals("net.pipe".AsSpan(), sc) || value.Equals("net.tcp".AsSpan(), sc)
+                    : value.Equals("nntp".AsSpan(), sc);
             }
 
             return false;
@@ -1455,7 +1468,7 @@ namespace WebSocketSharp
         /// <param name="value">
         /// A <see cref="string"/> to test.
         /// </param>
-        public static bool MaybeUri(this string value)
+        public static bool MaybeUri(this ReadOnlySpan<char> value)
         {
             if (value == null || value.Length == 0)
                 return false;
@@ -1467,47 +1480,8 @@ namespace WebSocketSharp
             if (idx >= 10)
                 return false;
 
-            var schm = value.Substring(0, idx);
+            var schm = value.Slice(0, idx);
             return schm.IsPredefinedScheme();
-        }
-
-        /// <summary>
-        /// Retrieves a sub-array from the specified <paramref name="array"/>. A sub-array starts at
-        /// the specified element position in <paramref name="array"/>.
-        /// </summary>
-        /// <returns>
-        /// An array of T that receives a sub-array, or an empty array of T if any problems with
-        /// the parameters.
-        /// </returns>
-        /// <param name="array">
-        /// An array of T from which to retrieve a sub-array.
-        /// </param>
-        /// <param name="startIndex">
-        /// An <see cref="int"/> that represents the zero-based starting position of
-        /// a sub-array in <paramref name="array"/>.
-        /// </param>
-        /// <param name="length">
-        /// An <see cref="int"/> that represents the number of elements to retrieve.
-        /// </param>
-        /// <typeparam name="T">
-        /// The type of elements in <paramref name="array"/>.
-        /// </typeparam>
-        public static T[] SubArray<T>(this T[] array, int startIndex, int length)
-        {
-            int len;
-            if (array == null || (len = array.Length) == 0)
-                return Array.Empty<T>();
-
-            if (startIndex < 0 || length <= 0 || startIndex + length > len)
-                return Array.Empty<T>();
-
-            if (startIndex == 0 && length == len)
-                return array;
-
-            var subArray = new T[length];
-            Array.Copy(array, startIndex, subArray, 0, length);
-
-            return subArray;
         }
 
         /// <summary>
@@ -1797,7 +1771,7 @@ namespace WebSocketSharp
         /// </param>
         public static Uri ToUri(this string value)
         {
-            Uri.TryCreate(value, value.MaybeUri() ? UriKind.Absolute : UriKind.Relative, out Uri ret);
+            Uri.TryCreate(value, value.AsSpan().MaybeUri() ? UriKind.Absolute : UriKind.Relative, out Uri ret);
             return ret;
         }
         /// <summary>

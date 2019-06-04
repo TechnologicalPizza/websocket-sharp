@@ -324,7 +324,7 @@ namespace WebSocketSharp.Server
         #region Private Methods
 
         // TODO: reduce allocs
-        private void Broadcast(Opcode opcode, byte[] data, Action completed)
+        private void Broadcast(OpCode opcode, byte[] data, Action completed)
         {
             var cache = new Dictionary<CompressionMethod, Stream>();
             try
@@ -354,7 +354,7 @@ namespace WebSocketSharp.Server
         }
 
         // TODO: reduce allocs
-        private void Broadcast(Opcode opcode, Stream stream, Action completed)
+        private void Broadcast(OpCode opcode, Stream stream, Action completed)
         {
             var cache = new Dictionary<CompressionMethod, Stream>();
             try
@@ -385,13 +385,13 @@ namespace WebSocketSharp.Server
             }
         }
 
-        private void BroadcastAsync(Opcode opcode, byte[] data, Action completed)
+        private void BroadcastAsync(OpCode opcode, byte[] data, Action completed)
         {
             ThreadPool.QueueUserWorkItem(
               state => Broadcast(opcode, data, completed));
         }
 
-        private void BroadcastAsync(Opcode opcode, Stream stream, Action completed)
+        private void BroadcastAsync(OpCode opcode, Stream stream, Action completed)
         {
             ThreadPool.QueueUserWorkItem(
               state => Broadcast(opcode, stream, completed));
@@ -556,9 +556,9 @@ namespace WebSocketSharp.Server
                 throw new ArgumentNullException(nameof(data));
 
             if (data.LongLength <= WebSocket.FragmentLength)
-                Broadcast(Opcode.Binary, data, null);
+                Broadcast(OpCode.Binary, data, null);
             else
-                Broadcast(Opcode.Binary, RecyclableMemoryManager.Shared.GetStream(data), null);
+                Broadcast(OpCode.Binary, RecyclableMemoryManager.Shared.GetStream(data), null);
         }
 
         /// <summary>
@@ -588,9 +588,9 @@ namespace WebSocketSharp.Server
                 throw new ArgumentException("It could not be UTF-8 encoded.", nameof(data));
 
             if (bytes.LongLength <= WebSocket.FragmentLength)
-                Broadcast(Opcode.Text, bytes, null);
+                Broadcast(OpCode.Text, bytes, null);
             else
-                Broadcast(Opcode.Text, RecyclableMemoryManager.Shared.GetStream(bytes), null);
+                Broadcast(OpCode.Text, RecyclableMemoryManager.Shared.GetStream(bytes), null);
         }
 
         /// <summary>
@@ -651,7 +651,7 @@ namespace WebSocketSharp.Server
             if (len < length)
                 _log.Warn($"Only {len} byte(s) of data could be read from the stream.");
 
-            Broadcast(Opcode.Binary, bytes, null);
+            Broadcast(OpCode.Binary, bytes, null);
         }
 
         /// <summary>
@@ -691,9 +691,9 @@ namespace WebSocketSharp.Server
                 throw new ArgumentNullException("data");
 
             if (data.LongLength <= WebSocket.FragmentLength)
-                BroadcastAsync(Opcode.Binary, data, completed);
+                BroadcastAsync(OpCode.Binary, data, completed);
             else
-                BroadcastAsync(Opcode.Binary, RecyclableMemoryManager.Shared.GetStream(data), completed);
+                BroadcastAsync(OpCode.Binary, RecyclableMemoryManager.Shared.GetStream(data), completed);
         }
 
         /// <summary>
@@ -742,9 +742,9 @@ namespace WebSocketSharp.Server
             }
 
             if (bytes.LongLength <= WebSocket.FragmentLength)
-                BroadcastAsync(Opcode.Text, bytes, completed);
+                BroadcastAsync(OpCode.Text, bytes, completed);
             else
-                BroadcastAsync(Opcode.Text, RecyclableMemoryManager.Shared.GetStream(bytes), completed);
+                BroadcastAsync(OpCode.Text, RecyclableMemoryManager.Shared.GetStream(bytes), completed);
         }
 
         /// <summary>
@@ -818,7 +818,7 @@ namespace WebSocketSharp.Server
             if (bytes.Length < length)
                 _log.Warn($"Only {bytes.Length} byte(s) of data could be read from the stream.");
 
-            BroadcastAsync(Opcode.Binary, bytes, completed);
+            BroadcastAsync(OpCode.Binary, bytes, completed);
         }
 
         /// <summary>

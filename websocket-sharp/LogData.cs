@@ -32,29 +32,20 @@ using System.Text;
 
 namespace WebSocketSharp
 {
-  /// <summary>
-  /// Represents a log data used by the <see cref="Logger"/> class.
-  /// </summary>
-  public class LogData
-  {
-    #region Private Fields
-
-    private StackFrame _caller;
-    private DateTime   _date;
-    private LogLevel   _level;
-    private string     _message;
-
-    #endregion
-
-    #region Internal Constructors
-
-    internal LogData (LogLevel level, StackFrame caller, string message)
+    /// <summary>
+    /// Represents a log data used by the <see cref="Logger"/> class.
+    /// </summary>
+    public readonly struct LogData
     {
-      _level = level;
-      _caller = caller;
-      _message = message ?? string.Empty;
-      _date = DateTime.Now;
-    }
+        #region Internal Constructors
+
+        internal LogData(LogLevel level, StackFrame caller, string message)
+        {
+            Level = level;
+            Caller = caller;
+            Message = message ?? string.Empty;
+            Date = DateTime.Now;
+        }
 
         #endregion
 
@@ -66,7 +57,7 @@ namespace WebSocketSharp
         /// <value>
         /// A <see cref="StackFrame"/> that provides the information of the logging method caller.
         /// </value>
-        public StackFrame Caller => _caller;
+        public StackFrame Caller { get; }
 
         /// <summary>
         /// Gets the date and time when the log data was created.
@@ -74,7 +65,7 @@ namespace WebSocketSharp
         /// <value>
         /// A <see cref="DateTime"/> that represents the date and time when the log data was created.
         /// </value>
-        public DateTime Date => _date;
+        public DateTime Date { get; }
 
         /// <summary>
         /// Gets the logging level of the log data.
@@ -82,7 +73,7 @@ namespace WebSocketSharp
         /// <value>
         /// One of the <see cref="LogLevel"/> enum values, indicates the logging level of the log data.
         /// </value>
-        public LogLevel Level => _level;
+        public LogLevel Level { get; }
 
         /// <summary>
         /// Gets the message of the log data.
@@ -90,7 +81,7 @@ namespace WebSocketSharp
         /// <value>
         /// A <see cref="string"/> that represents the message of the log data.
         /// </value>
-        public string Message => _message;
+        public string Message { get; }
 
         #endregion
 
@@ -102,32 +93,32 @@ namespace WebSocketSharp
         /// <returns>
         /// A <see cref="string"/> that represents the current <see cref="LogData"/>.
         /// </returns>
-        public override string ToString ()
-    {
-      var header = string.Format ("{0}|{1,-5}|", _date, _level);
-      var method = _caller.GetMethod ();
-      var type = method.DeclaringType;
+        public override string ToString()
+        {
+            var header = string.Format("{0}|{1,-5}|", Date, Level);
+            var method = Caller.GetMethod();
+            var type = method.DeclaringType;
 #if DEBUG
-      var lineNum = _caller.GetFileLineNumber ();
-      var headerAndCaller =
-        string.Format ("{0}{1}.{2}:{3}|", header, type.Name, method.Name, lineNum);
+            var lineNum = Caller.GetFileLineNumber();
+            var headerAndCaller =
+              string.Format("{0}{1}.{2}:{3}|", header, type.Name, method.Name, lineNum);
 #else
       var headerAndCaller = string.Format ("{0}{1}.{2}|", header, type.Name, method.Name);
 #endif
-      var msgs = _message.Replace ("\r\n", "\n").TrimEnd ('\n').Split ('\n');
-      if (msgs.Length <= 1)
-        return string.Format ("{0}{1}", headerAndCaller, _message);
+            var msgs = Message.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
+            if (msgs.Length <= 1)
+                return string.Format("{0}{1}", headerAndCaller, Message);
 
-      var buff = new StringBuilder (string.Format ("{0}{1}\n", headerAndCaller, msgs[0]), 64);
+            var buff = new StringBuilder(string.Format("{0}{1}\n", headerAndCaller, msgs[0]), 64);
 
-      var fmt = string.Format ("{{0,{0}}}{{1}}\n", header.Length);
-      for (var i = 1; i < msgs.Length; i++)
-        buff.AppendFormat (fmt, "", msgs[i]);
+            var fmt = string.Format("{{0,{0}}}{{1}}\n", header.Length);
+            for (var i = 1; i < msgs.Length; i++)
+                buff.AppendFormat(fmt, "", msgs[i]);
 
-      buff.Length--;
-      return buff.ToString ();
+            buff.Length--;
+            return buff.ToString();
+        }
+
+        #endregion
     }
-
-    #endregion
-  }
 }

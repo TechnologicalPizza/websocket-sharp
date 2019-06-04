@@ -54,7 +54,7 @@ namespace WebSocketSharp
             RawData = frame.PayloadData.ApplicationData;
         }
 
-        internal MessageEvent(Opcode opcode, ReadOnlyMemory<byte> rawData)
+        internal MessageEvent(OpCode opcode, ReadOnlyMemory<byte> rawData)
         {
             if ((ulong)rawData.Length > PayloadData.MaxLength)
                 throw new WebSocketException(CloseStatusCode.TooBig);
@@ -71,10 +71,10 @@ namespace WebSocketSharp
         /// Gets the opcode for the message.
         /// </summary>
         /// <value>
-        /// <see cref="Opcode.Text"/>, <see cref="Opcode.Binary"/>,
-        /// or <see cref="Opcode.Ping"/>.
+        /// <see cref="OpCode.Text"/>, <see cref="OpCode.Binary"/>,
+        /// or <see cref="OpCode.Ping"/>.
         /// </value>
-        internal Opcode Opcode { get; }
+        internal OpCode Opcode { get; }
 
         #endregion
 
@@ -94,7 +94,7 @@ namespace WebSocketSharp
         /// <value>
         /// <c>true</c> if the message type is binary; otherwise, <c>false</c>.
         /// </value>
-        public bool IsBinary => Opcode == Opcode.Binary;
+        public bool IsBinary => Opcode == OpCode.Binary;
 
         /// <summary>
         /// Gets a value indicating whether the message type is ping.
@@ -102,7 +102,7 @@ namespace WebSocketSharp
         /// <value>
         /// <c>true</c> if the message type is ping; otherwise, <c>false</c>.
         /// </value>
-        public bool IsPing => Opcode == Opcode.Ping;
+        public bool IsPing => Opcode == OpCode.Ping;
 
         /// <summary>
         /// Gets a value indicating whether the message type is text.
@@ -110,7 +110,7 @@ namespace WebSocketSharp
         /// <value>
         /// <c>true</c> if the message type is text; otherwise, <c>false</c>.
         /// </value>
-        public bool IsText => Opcode == Opcode.Text;
+        public bool IsText => Opcode == OpCode.Text;
 
         #endregion
     }

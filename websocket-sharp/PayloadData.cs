@@ -27,20 +27,16 @@
 #endregion
 
 using System;
-using System.Collections;
-using System.Collections.Generic;
 
 namespace WebSocketSharp
 {
-    internal class PayloadData
+    internal struct PayloadData
     {
         #region Private Fields
 
+        private readonly byte[] _data;
         private ushort _code;
         private bool _codeSet;
-        private byte[] _data;
-        private long _extDataLength;
-        private long _length;
         private string _reason;
         private bool _reasonSet;
 
@@ -51,7 +47,7 @@ namespace WebSocketSharp
         /// <summary>
         /// Represents the empty payload data.
         /// </summary>
-        public static readonly PayloadData Empty;
+        public static PayloadData Empty { get; } = new PayloadData(1005, string.Empty);
 
         /// <summary>
         /// Represents the allowable max length.
@@ -66,54 +62,41 @@ namespace WebSocketSharp
         ///   <c>WebSocket.FragmentLength</c> and <c>Int64.MaxValue</c> inclusive.
         ///   </para>
         /// </remarks>
-        public static readonly ulong MaxLength;
-
-        #endregion
-
-        #region Static Constructor
-
-        static PayloadData()
-        {
-            Empty = new PayloadData();
-            MaxLength = int.MaxValue;
-        }
+        public static readonly ulong MaxLength = int.MaxValue;
 
         #endregion
 
         #region Internal Constructors
 
-        internal PayloadData()
-        {
-            _code = 1005;
-            _reason = string.Empty;
-
-            _data = Array.Empty<byte>();
-
-            _codeSet = true;
-            _reasonSet = true;
-        }
-
         internal PayloadData(byte[] data)
-          : this(data, data.LongLength)
+            : this(data, data.LongLength)
         {
         }
 
         internal PayloadData(byte[] data, long length)
         {
             _data = data;
-            _length = length;
+            Length = length;
+            ExtensionDataLength = 0;
+
+            _code = 0;
+            _codeSet = false;
+
+            _reason = string.Empty;
+            _reasonSet = false;
         }
 
         internal PayloadData(ushort code, string reason)
         {
             _code = code;
+            _codeSet = true;
+
             _reason = reason ?? string.Empty;
+            _reasonSet = true;
 
             _data = code.Append(reason);
-            _length = _data.LongLength;
-
-            _codeSet = true;
-            _reasonSet = true;
+            Length = _data.LongLength;
+            ExtensionDataLength = 0;
         }
 
         #endregion
@@ -126,23 +109,16 @@ namespace WebSocketSharp
             {
                 if (!_codeSet)
                 {
-                    _code = _length > 1
-                            ? _data.SubArray(0, 2).ToUInt16(ByteOrder.Big)
-                            : (ushort)1005;
-
+                    _code = Length > 1 ? _data.ToUInt16(ByteOrder.Big) : (ushort)1005;
                     _codeSet = true;
                 }
                 return _code;
             }
         }
 
-        internal long ExtensionDataLength
-        {
-            get => _extDataLength;
-            set => _extDataLength = value;
-        }
+        internal long ExtensionDataLength { get; }
 
-        internal bool HasReservedCode => _length > 1 && Code.IsReserved();
+        internal bool HasReservedCode => Length > 1 && Code.IsReserved();
 
         internal string Reason
         {
@@ -150,10 +126,7 @@ namespace WebSocketSharp
             {
                 if (!_reasonSet)
                 {
-                    _reason = _length > 2
-                              ? _data.SubArray(2, _length - 2).UTF8Decode()
-                              : string.Empty;
-
+                    _reason = Length > 2 ? _data.UTF8Decode(2, (int)(Length - 2)) : string.Empty;
                     _reasonSet = true;
                 }
                 return _reason;
@@ -165,14 +138,14 @@ namespace WebSocketSharp
         #region Public Properties
 
         public ReadOnlyMemory<byte> ApplicationData =>
-            new ReadOnlyMemory<byte>(_data, (int)_extDataLength, (int)(_length - _extDataLength));
+            new ReadOnlyMemory<byte>(_data, (int)ExtensionDataLength, (int)(Length - ExtensionDataLength));
 
-        public ReadOnlyMemory<byte> ExtensionData => 
-            new ReadOnlyMemory<byte>(_data, 0, (int)_extDataLength);
+        public ReadOnlyMemory<byte> ExtensionData =>
+            new ReadOnlyMemory<byte>(_data, 0, (int)ExtensionDataLength);
 
         public ReadOnlyMemory<byte> Data => new ReadOnlyMemory<byte>(_data);
 
-        public ulong Length => (ulong)_length;
+        public long Length { get; }
 
         #endregion
 
@@ -180,7 +153,7 @@ namespace WebSocketSharp
 
         internal void Mask(byte[] key)
         {
-            for (long i = 0; i < _length; i++)
+            for (long i = 0; i < Length; i++)
                 _data[i] = (byte)(_data[i] ^ key[i % 4]);
         }
 
