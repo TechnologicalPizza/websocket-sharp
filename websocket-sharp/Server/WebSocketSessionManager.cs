@@ -522,8 +522,8 @@ namespace WebSocketSharp.Server
 
         internal void Stop(ushort code, string reason)
         {
-            if (code == 1005)
-            { // == no status
+            if (code == 1005) // == no status
+            { 
                 Stop(PayloadData.Empty, true);
                 return;
             }

@@ -51,7 +51,7 @@ namespace WebSocketSharp.Net
 {
     internal static class HttpUtility
     {
-        internal static char[] UrlEncodingChars = new[] { '%', '+' };
+        public static char[] UrlEncodingChars = new[] { '%', '+' };
 
         #region Private Fields
 

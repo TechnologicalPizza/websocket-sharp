@@ -71,7 +71,7 @@ namespace WebSocketSharp
 
         private static readonly byte[] _last = new byte[] { 0x00 };
         private const string _tspecials = "()<>@,;:\\\"/[]?={} \t";
-        private static readonly char[] _absolutionChars = new[] { '?', '#' };
+        public static readonly char[] QueryFragmentComponents = new[] { '?', '#' };
 
         #endregion
 
@@ -96,17 +96,14 @@ namespace WebSocketSharp
                     return output;
 
                 stream.Position = 0;
-                using (var ds = new DeflateStream(output, CompressionMode.Compress, true))
-                {
+                using (var ds = new DeflateStream(output, CompressionLevel.Fastest, true))
                     stream.CopyBytesTo(ds);
-                    ds.Close();
-                    
-                    // BFINAL set to 1.
-                    output.Write(_last, 0, 1);
 
-                    output.Position = 0;
-                    return output;
-                }
+                // BFINAL set to 1.
+                output.Write(_last, 0, 1);
+
+                output.Position = 0;
+                return output;
             }
             catch
             {
@@ -397,7 +394,7 @@ namespace WebSocketSharp
             if (original[0] != '/')
                 return null;
 
-            int idx = original.IndexOfAny(_absolutionChars);
+            int idx = original.IndexOfAny(QueryFragmentComponents);
             return idx > 0 ? original.Substring(0, idx) : original;
         }
 

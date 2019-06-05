@@ -1800,6 +1800,10 @@ namespace WebSocketSharp
                     {
                         stream = stream.Compress(_compression);
                         compressed = true;
+
+                        // to free up memory blocks before calling InternalSend
+                        src.Dispose();
+                        src = null;
                     }
 
                     sent = InternalSend(opcode, stream, compressed);
@@ -1815,7 +1819,7 @@ namespace WebSocketSharp
                 {
                     if (compressed)
                         stream.Dispose();
-                    src.Dispose();
+                    src?.Dispose();
                 }
 
                 return sent;
@@ -1836,14 +1840,14 @@ namespace WebSocketSharp
             {
                 buff = new byte[rem];
                 return stream.Read(buff, 0, rem) == rem
-                       && InternalSend(Fin.Final, opcode, buff, compressed);
+                    && InternalSend(Fin.Final, opcode, buff, compressed);
             }
 
             if (quo == 1 && rem == 0)
             {
                 buff = new byte[FragmentLength];
                 return stream.Read(buff, 0, FragmentLength) == FragmentLength
-                       && InternalSend(Fin.Final, opcode, buff, compressed);
+                    && InternalSend(Fin.Final, opcode, buff, compressed);
             }
 
             /* Send fragments */
@@ -1851,7 +1855,7 @@ namespace WebSocketSharp
             // Begin
             buff = new byte[FragmentLength];
             bool sent = stream.Read(buff, 0, FragmentLength) == FragmentLength
-                       && InternalSend(Fin.More, opcode, buff, compressed);
+                && InternalSend(Fin.More, opcode, buff, compressed);
 
             if (!sent)
                 return false;
@@ -1860,7 +1864,7 @@ namespace WebSocketSharp
             for (long i = 0; i < n; i++)
             {
                 sent = stream.Read(buff, 0, FragmentLength) == FragmentLength
-                       && InternalSend(Fin.More, OpCode.Cont, buff, false);
+                    && InternalSend(Fin.More, OpCode.Cont, buff, false);
 
                 if (!sent)
                     return false;
@@ -1873,7 +1877,7 @@ namespace WebSocketSharp
                 buff = new byte[rem];
 
             return stream.Read(buff, 0, rem) == rem
-                   && InternalSend(Fin.Final, OpCode.Cont, buff, false);
+                && InternalSend(Fin.Final, OpCode.Cont, buff, false);
         }
 
         private bool InternalSend(Fin fin, OpCode opcode, byte[] data, bool compressed)
@@ -3342,6 +3346,7 @@ namespace WebSocketSharp
             {
                 writer.Write(text);
                 writer.Flush();
+
                 tmp.Position = 0;
                 InternalSend(OpCode.Text, tmp);
             }

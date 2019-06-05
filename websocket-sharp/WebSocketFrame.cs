@@ -40,7 +40,7 @@ using WebSocketSharp.Memory;
 
 namespace WebSocketSharp
 {
-    internal struct WebSocketFrame
+    internal class WebSocketFrame
     {
         #region Private Fields
 
@@ -131,6 +131,10 @@ namespace WebSocketSharp
             }
 
             _payloadData = payloadData;
+        }
+
+        public WebSocketFrame()
+        {
         }
 
         #endregion
@@ -512,7 +516,10 @@ Extended Payload Length: {7}
                     buff.Write(_maskingKey, 0, 4);
 
                 if (_payloadLength > 0)
-                    buff.Write(_payloadData.Data.Span);
+                {
+                    var pd = _payloadData.Data;
+                    buff.Write(pd, 0, pd.Length);
+                }
 
                 buff.Position = 0;
                 return buff;

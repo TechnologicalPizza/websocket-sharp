@@ -109,8 +109,7 @@ namespace WebSocketSharp.Server
         /// <exception cref="ArgumentOutOfRangeException">
         /// <paramref name="port"/> is less than 1 or greater than 65535.
         /// </exception>
-        public HttpServer(int port)
-          : this(port, port == 443)
+        public HttpServer(int port) : this(port, port == 443)
         {
         }
 
@@ -153,28 +152,24 @@ namespace WebSocketSharp.Server
         public HttpServer(string url)
         {
             if (url == null)
-                throw new ArgumentNullException("url");
+                throw new ArgumentNullException(nameof(url));
 
             if (url.Length == 0)
-                throw new ArgumentException("An empty string.", "url");
+                throw new ArgumentException("An empty string.", nameof(url));
 
             if (!TryCreateUri(url, out Uri uri, out string msg))
-                throw new ArgumentException(msg, "url");
+                throw new ArgumentException(msg, nameof(url));
 
             var host = uri.GetDnsSafeHost(true);
 
             var addr = host.ToIPAddress();
             if (addr == null)
-            {
-                msg = "The host part could not be converted to an IP address.";
-                throw new ArgumentException(msg, "url");
-            }
+                throw new ArgumentException(
+                    "The host part could not be converted to an IP address.", nameof(url));
 
             if (!addr.IsLocal())
-            {
-                msg = "The IP address of the host is not a local IP address.";
-                throw new ArgumentException(msg, "url");
-            }
+                throw new ArgumentException(
+                    "The IP address of the host is not a local IP address.", nameof(url));
 
             Init(host, addr, uri.Port, uri.Scheme == "https");
         }
@@ -201,11 +196,9 @@ namespace WebSocketSharp.Server
         public HttpServer(int port, bool secure)
         {
             if (!port.IsPortNumber())
-            {
-                var msg = "Less than 1 or greater than 65535.";
-                throw new ArgumentOutOfRangeException("port", msg);
-            }
-
+                throw new ArgumentOutOfRangeException(
+                    nameof(port), "Less than 1 or greater than 65535.");
+        
             Init("*", System.Net.IPAddress.Any, port, secure);
         }
 
@@ -240,7 +233,7 @@ namespace WebSocketSharp.Server
         /// <paramref name="port"/> is less than 1 or greater than 65535.
         /// </exception>
         public HttpServer(System.Net.IPAddress address, int port)
-          : this(address, port, port == 443)
+            : this(address, port, port == 443)
         {
         }
 
@@ -277,17 +270,15 @@ namespace WebSocketSharp.Server
         public HttpServer(System.Net.IPAddress address, int port, bool secure)
         {
             if (address == null)
-                throw new ArgumentNullException("address");
+                throw new ArgumentNullException(nameof(address));
 
             if (!address.IsLocal())
-                throw new ArgumentException("Not a local IP address.", "address");
+                throw new ArgumentException("Not a local IP address.", nameof(address));
 
             if (!port.IsPortNumber())
-            {
-                var msg = "Less than 1 or greater than 65535.";
-                throw new ArgumentOutOfRangeException("port", msg);
-            }
-
+                throw new ArgumentOutOfRangeException(
+                    nameof(port), "Less than 1 or greater than 65535.");
+            
             Init(address.ToString(true), address, port, secure);
         }
 
@@ -771,7 +762,6 @@ namespace WebSocketSharp.Server
             {
                 if (_state != ServerState.Start)
                     return;
-
                 _state = ServerState.ShuttingDown;
             }
 
@@ -789,7 +779,6 @@ namespace WebSocketSharp.Server
             catch
             {
             }
-
             _state = ServerState.Stop;
         }
 
@@ -813,10 +802,10 @@ namespace WebSocketSharp.Server
 
         private bool CheckCertificate(out string message)
         {
-            var byUser = _listener.SslConfiguration.ServerCertificate != null;
+            bool byUser = _listener.SslConfiguration.ServerCertificate != null;
 
             var path = _listener.CertificateFolderPath;
-            var withPort = EndPointListener.CertificateExists(_port, path);
+            bool withPort = EndPointListener.CertificateExists(_port, path);
 
             if (!(byUser || withPort))
             {
@@ -834,14 +823,13 @@ namespace WebSocketSharp.Server
         private string CreateFilePath(string childPath)
         {
             childPath = childPath.TrimStart('/', '\\');
-            return new StringBuilder(_docRootPath, 32)
+            return new StringBuilder(_docRootPath, childPath.Length + 1)
                    .AppendFormat("/{0}", childPath)
-                   .ToString()
-                   .Replace('\\', '/');
+                   .Replace('\\', '/')
+                   .ToString();
         }
 
-        private static HttpListener CreateListener(
-            string hostname, int port, bool secure)
+        private static HttpListener CreateListener(string hostname, int port, bool secure)
         {
             var lsnr = new HttpListener();
 
@@ -869,31 +857,28 @@ namespace WebSocketSharp.Server
 
         private void ProcessRequest(HttpListenerContext context)
         {
-            var method = context.Request.HttpMethod;
-            var evt = method == "GET"
-                      ? OnGet
-                      : method == "HEAD"
-                        ? OnHead
-                        : method == "POST"
-                          ? OnPost
-                          : method == "PUT"
-                            ? OnPut
-                            : method == "DELETE"
-                              ? OnDelete
-                              : method == "CONNECT"
-                                ? OnConnect
-                                : method == "OPTIONS"
-                                  ? OnOptions
-                                  : method == "TRACE"
-                                    ? OnTrace
-                                    : null;
-
+            var evt = GetEventForMethod(context.Request.HttpMethod);
             if (evt != null)
-                evt(this, new HttpRequestEvent(context, _docRootPath));
+                evt.Invoke(this, new HttpRequestEvent(context, _docRootPath));
             else
-                context.Response.StatusCode = 501; // Not Implemented
-
+                context.Response.StatusCode = (int)HttpStatusCode.NotImplemented;
             context.Response.Close();
+        }
+
+        private EventHandler<HttpRequestEvent> GetEventForMethod(string httpMethod)
+        {
+            switch (httpMethod)
+            {
+                case "GET": return OnGet;
+                case "HEAD": return OnHead;
+                case "POST": return OnPost;
+                case "PUT": return OnPut;
+                case "DELETE": return OnDelete;
+                case "CONNECT": return OnConnect;
+                case "OPTIONS": return OnOptions;
+                case "TRACE": return OnTrace;
+                default: return null;
+            }
         }
 
         private void ProcessRequest(HttpListenerWebSocketContext context)
@@ -927,27 +912,25 @@ namespace WebSocketSharp.Server
                 {
                     ctx = _listener.GetContext();
                     ThreadPool.QueueUserWorkItem(
-                      state =>
-                      {
-                          try
-                          {
-                              if (ctx.Request.IsUpgradeRequest("websocket"))
-                              {
-                                  ProcessRequest(ctx.AcceptWebSocket(null));
-                                  return;
-                              }
-
-                              ProcessRequest(ctx);
-                          }
-                          catch (Exception ex)
-                          {
-                              _log.Fatal(ex.Message);
-                              _log.Debug(ex.ToString());
-
-                              ctx.Connection.Close(true);
-                          }
-                      }
-                    );
+                        state =>
+                        {
+                            try
+                            {
+                                if (ctx.Request.IsUpgradeRequest("websocket"))
+                                {
+                                    ProcessRequest(ctx.AcceptWebSocket(null));
+                                    return;
+                                }
+                                ProcessRequest(ctx);
+                            }
+                            catch (Exception ex)
+                            {
+                                _log.Fatal(ex.Message);
+                                _log.Debug(ex.ToString());
+                        
+                                ctx.Connection.Close(true);
+                            }
+                        });
                 }
                 catch (HttpListenerException)
                 {
@@ -966,7 +949,6 @@ namespace WebSocketSharp.Server
 
                     if (ctx != null)
                         ctx.Connection.Close(true);
-
                     break;
                 }
             }
@@ -1237,23 +1219,21 @@ namespace WebSocketSharp.Server
           where TBehavior : WebSocketBehavior
         {
             if (path == null)
-                throw new ArgumentNullException("path");
+                throw new ArgumentNullException(nameof(path));
 
             if (creator == null)
-                throw new ArgumentNullException("creator");
+                throw new ArgumentNullException(nameof(creator));
 
             if (path.Length == 0)
-                throw new ArgumentException("An empty string.", "path");
+                throw new ArgumentException("An empty string.", nameof(path));
 
             if (path[0] != '/')
-                throw new ArgumentException("Not an absolute path.", "path");
+                throw new ArgumentException("Not an absolute path.", nameof(path));
 
-            if (path.IndexOfAny(new[] { '?', '#' }) > -1)
-            {
-                var msg = "It includes either or both query and fragment components.";
-                throw new ArgumentException(msg, "path");
-            }
-
+            if (path.IndexOfAny(Ext.QueryFragmentComponents) > -1)
+                throw new ArgumentException(
+                    "It includes either or both query and fragment components.", nameof(path));
+            
             _services.Add(path, creator);
         }
 
@@ -1567,36 +1547,24 @@ namespace WebSocketSharp.Server
         public void Stop(ushort code, string reason)
         {
             if (!code.IsCloseStatusCode())
-            {
-                var msg = "Less than 1000 or greater than 4999.";
-                throw new ArgumentOutOfRangeException("code", msg);
-            }
+                throw new ArgumentOutOfRangeException(
+                    nameof(code), "Less than 1000 or greater than 4999.");
 
             if (code == 1010)
-            {
-                var msg = "1010 cannot be used.";
-                throw new ArgumentException(msg, "code");
-            }
+                throw new ArgumentException("1010 cannot be used.", nameof(code));
 
             if (!reason.IsNullOrEmpty())
             {
                 if (code == 1005)
-                {
-                    var msg = "1005 cannot be used.";
-                    throw new ArgumentException(msg, "code");
-                }
+                    throw new ArgumentException("1005 cannot be used.", nameof(code));
 
                 if (!reason.TryGetUTF8EncodedBytes(out byte[] bytes))
-                {
-                    var msg = "It could not be UTF-8 encoded.";
-                    throw new ArgumentException(msg, "reason");
-                }
+                    throw new ArgumentException(
+                        "It could not be UTF-8 encoded.", nameof(reason));
 
                 if (bytes.Length > 123)
-                {
-                    var msg = "Its size is greater than 123 bytes.";
-                    throw new ArgumentOutOfRangeException("reason", msg);
-                }
+                    throw new ArgumentOutOfRangeException(
+                        nameof(reason), "Its size is greater than 123 bytes.");
             }
 
             InternalStop(code, reason);
@@ -1649,30 +1617,20 @@ namespace WebSocketSharp.Server
         public void Stop(CloseStatusCode code, string reason)
         {
             if (code == CloseStatusCode.MandatoryExtension)
-            {
-                var msg = "MandatoryExtension cannot be used.";
-                throw new ArgumentException(msg, "code");
-            }
-
+                throw new ArgumentException(
+                    "MandatoryExtension cannot be used.", nameof(code));
+            
             if (!reason.IsNullOrEmpty())
             {
                 if (code == CloseStatusCode.NoStatus)
-                {
-                    var msg = "NoStatus cannot be used.";
-                    throw new ArgumentException(msg, "code");
-                }
+                    throw new ArgumentException("NoStatus cannot be used.", nameof(code));
 
                 if (!reason.TryGetUTF8EncodedBytes(out byte[] bytes))
-                {
-                    var msg = "It could not be UTF-8 encoded.";
-                    throw new ArgumentException(msg, "reason");
-                }
+                    throw new ArgumentException("It could not be UTF-8 encoded.", nameof(reason));
 
                 if (bytes.Length > 123)
-                {
-                    var msg = "Its size is greater than 123 bytes.";
-                    throw new ArgumentOutOfRangeException("reason", msg);
-                }
+                    throw new ArgumentOutOfRangeException(
+                        nameof(reason), "Its size is greater than 123 bytes.");
             }
 
             InternalStop((ushort)code, reason);

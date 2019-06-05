@@ -667,10 +667,8 @@ namespace WebSocketSharp.Net
                 {
                     _context.ErrorMessage = string.Empty;
                     _context.ErrorStatus = 501;
-
                     return;
                 }
-
                 _chunked = true;
             }
 
@@ -680,7 +678,6 @@ namespace WebSocketSharp.Net
                 {
                     _context.ErrorMessage = string.Empty;
                     _context.ErrorStatus = 411;
-
                     return;
                 }
             }

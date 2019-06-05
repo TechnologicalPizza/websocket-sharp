@@ -1103,22 +1103,20 @@ namespace WebSocketSharp.Server
           where TBehavior : WebSocketBehavior
         {
             if (path == null)
-                throw new ArgumentNullException("path");
+                throw new ArgumentNullException(nameof(path));
 
             if (creator == null)
-                throw new ArgumentNullException("creator");
+                throw new ArgumentNullException(nameof(creator));
 
             if (path.Length == 0)
-                throw new ArgumentException("An empty string.", "path");
+                throw new ArgumentException("An empty string.", nameof(path));
 
             if (path[0] != '/')
-                throw new ArgumentException("Not an absolute path.", "path");
+                throw new ArgumentException("Not an absolute path.", nameof(path));
 
-            if (path.IndexOfAny(new[] { '?', '#' }) > -1)
-            {
-                var msg = "It includes either or both query and fragment components.";
-                throw new ArgumentException(msg, "path");
-            }
+            if (path.IndexOfAny(Ext.QueryFragmentComponents) > -1)
+                throw new ArgumentException(
+                    "It includes either or both query and fragment components.", nameof(path));
 
             _services.Add(path, creator);
         }

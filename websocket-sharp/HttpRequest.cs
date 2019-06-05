@@ -161,7 +161,7 @@ namespace WebSocketSharp
                 headers.InternalSet(headerParts[i], false);
 
             return new HttpRequest(
-              requestLine[0], requestLine[1], new Version(requestLine[2].Substring(5)), headers);
+                requestLine[0], requestLine[1], new Version(requestLine[2].Substring(5)), headers);
         }
 
         internal static HttpRequest Read(Stream stream, int millisecondsTimeout)

@@ -143,7 +143,7 @@ namespace WebSocketSharp
         public ReadOnlyMemory<byte> ExtensionData =>
             new ReadOnlyMemory<byte>(_data, 0, (int)ExtensionDataLength);
 
-        public ReadOnlyMemory<byte> Data => new ReadOnlyMemory<byte>(_data);
+        public byte[] Data => _data;
 
         public long Length { get; }
 

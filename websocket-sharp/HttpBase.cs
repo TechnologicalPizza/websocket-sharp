@@ -123,7 +123,8 @@ namespace WebSocketSharp
                 void Add(int i)
                 {
                     if (i == -1)
-                        throw new EndOfStreamException("The header cannot be read from the data source.");
+                        throw new EndOfStreamException(
+                            "The header cannot be read from the data source.");
 
                     tmp.WriteByte((byte)i);
                     cnt++;
