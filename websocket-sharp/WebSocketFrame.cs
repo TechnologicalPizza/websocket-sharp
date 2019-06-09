@@ -40,7 +40,7 @@ using WebSocketSharp.Memory;
 
 namespace WebSocketSharp
 {
-    internal class WebSocketFrame
+    internal struct WebSocketFrame
     {
         #region Private Fields
 
@@ -131,10 +131,6 @@ namespace WebSocketSharp
             }
 
             _payloadData = payloadData;
-        }
-
-        public WebSocketFrame()
-        {
         }
 
         #endregion

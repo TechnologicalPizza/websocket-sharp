@@ -29,7 +29,7 @@ namespace WebSocketSharp.Memory
     using System.Threading;
 
     /// <summary>
-    /// Manages pools of RecyclableMemoryStream objects.
+    /// Manages pools of <see cref="RecyclableMemoryStream"/> objects and other reusable objects.
     /// </summary>
     /// <remarks>
     /// There are two pools managed in here. The small pool contains same-sized buffers that are handed to streams
@@ -288,7 +288,7 @@ namespace WebSocketSharp.Memory
         /// Whether to save callstacks for stream allocations. This can help in debugging.
         /// It should NEVER be turned on generally in production.
         /// </summary>
-        public bool GenerateCallStacks { get; set; }
+        public bool GenerateCallStacks { get; set; } = true;
 
         /// <summary>
         /// Whether dirty buffers can be immediately returned to the buffer pool. E.g. when GetBuffer() is called on
@@ -693,7 +693,7 @@ namespace WebSocketSharp.Memory
             if (reader.BaseStream is RecyclableMemoryStream rs)
             {
                 if (rs.IsDisposed)
-                    throw new ArgumentException(nameof(reader), "The underlying stream is disposed.");
+                    throw new ArgumentException("The underlying stream is disposed.", nameof(reader));
 
                 lock (_streamReaderPool)
                 {
@@ -776,7 +776,7 @@ namespace WebSocketSharp.Memory
         /// <returns>A MemoryStream.</returns>
         public RecyclableMemoryStream GetStream(byte[] buffer, int offset, int count, string tag = null)
         {
-            var stream = new RecyclableMemoryStream(this, tag, count);
+            var stream = GetStream(count, tag);
             try
             {
                 stream.Write(buffer, offset, count);

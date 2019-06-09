@@ -51,7 +51,6 @@ using System.Collections.Specialized;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Sockets;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using WebSocketSharp.Memory;
@@ -64,6 +63,9 @@ namespace WebSocketSharp
     /// </summary>
     public static class Ext
     {
+        public static Encoding PlainUTF8 { get; } =
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
         #region Private Fields
 
         private static CompressionMethod[] _compressionMethods =
@@ -1556,7 +1558,7 @@ namespace WebSocketSharp
             {
                 int size = sizeof(T);
                 if (source.Length < size)
-                    throw new ArgumentException(nameof(source), $"Not enough bytes for type ({typeof(T)}).");
+                    throw new ArgumentException($"Not enough bytes for type ({typeof(T)}).", nameof(source));
 
                 if (size > 0)
                 {

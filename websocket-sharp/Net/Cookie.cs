@@ -725,13 +725,8 @@ namespace WebSocketSharp.Net
 
             if (_expires != DateTime.MinValue)
             {
-                buff.AppendFormat(
-                  "; Expires={0}",
-                  _expires.ToUniversalTime().ToString(
-                    "ddd, dd'-'MMM'-'yyyy HH':'mm':'ss 'GMT'",
-                    CultureInfo.CreateSpecificCulture("en-US")
-                  )
-                );
+                buff.AppendFormat("; Expires={0}", _expires.ToUniversalTime().ToString(
+                    "ddd, dd'-'MMM'-'yyyy HH':'mm':'ss 'GMT'", CultureInfo.CreateSpecificCulture("en-US")));
             }
 
             if (!_path.IsNullOrEmpty())
@@ -801,14 +796,14 @@ namespace WebSocketSharp.Net
 
             for (var i = 0; i < len; i++)
             {
-                var s = arr[i].Trim();
+                var s = arr[i].AsSpan().Trim();
                 if (s.Length == 0)
                 {
                     res[i] = int.MinValue;
                     continue;
                 }
 
-                if (!int.TryParse(s, out res[i]))
+                if (!int.TryParse(s.ToString(), out res[i]))
                     return false;
             }
 

@@ -81,7 +81,7 @@ namespace WebSocketSharp
         #region Public Properties
 
         /// <summary>
-        /// Gets the message data as an array of <see cref="byte"/>.
+        /// Gets the message data as <see cref="ReadOnlyMemory{byte}"/>.
         /// </summary>
         /// <value>
         /// An array of <see cref="byte"/> that represents the message data.

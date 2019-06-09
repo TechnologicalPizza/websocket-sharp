@@ -50,8 +50,7 @@ namespace WebSocketSharp.Net.WebSockets
         #region Internal Constructors
 
         internal HttpListenerWebSocketContext(
-          HttpListenerContext context, string protocol
-        )
+            HttpListenerContext context, string protocol)
         {
             _context = context;
             _websocket = new WebSocket(this, protocol);

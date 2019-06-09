@@ -1,67 +1,182 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using WebSocketSharp.Memory;
 
 namespace WebSocketSharp.Server
 {
-    public abstract class AttributedWebSocketBehavior : WebSocketBehavior
+    public abstract partial class AttributedWebSocketBehavior : WebSocketBehavior
     {
         private static Dictionary<Type, HandlerCollection> _handlerCache;
-        private static JsonSerializer _defaultSerializer;
+        private static Dictionary<Type, CodeCollection> _clientCodeCache;
+        private static Dictionary<Type, CodeCollection> _serverCodeCache;
 
         private HandlerCollection _handlers;
-        private CodeCollection _codes;
+        private CodeCollection _clientCodes;
+        private CodeCollection _serverCodes;
 
-        public bool CaseSensitiveCodes { get; }
+        public bool VerboseDebug { get; set; }
+        public bool UseNumericCodes { get; }
         public JsonLoadSettings LoadSettings { get; }
+
+        #region Constructors
 
         static AttributedWebSocketBehavior()
         {
             _handlerCache = new Dictionary<Type, HandlerCollection>();
-
-            _defaultSerializer = JsonSerializer.Create(new JsonSerializerSettings
-            {
-                NullValueHandling = NullValueHandling.Include,
-                Formatting = Formatting.None
-            });
+            _clientCodeCache = new Dictionary<Type, CodeCollection>();
+            _serverCodeCache = new Dictionary<Type, CodeCollection>();
         }
 
-        public AttributedWebSocketBehavior(bool caseSensitiveCodes = true, JsonLoadSettings loadSettings = null)
+        public AttributedWebSocketBehavior(
+            JsonLoadSettings loadSettings = null,
+            CodeEnumDefinition codeTypeDefinition = default)
         {
-            CaseSensitiveCodes = caseSensitiveCodes;
             LoadSettings = loadSettings ?? new JsonLoadSettings
             {
                 CommentHandling = CommentHandling.Ignore,
                 LineInfoHandling = LineInfoHandling.Ignore,
                 DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Replace
             };
+            UseNumericCodes = codeTypeDefinition.IsValid;
 
+            if (UseNumericCodes)
+                InitCodes(codeTypeDefinition);
+            InitHandlers();
+        }
+
+        #endregion
+
+        #region Initializing
+
+        private void InitHandlers()
+        {
             lock (_handlerCache)
             {
                 Type type = GetType();
                 if (!_handlerCache.TryGetValue(type, out _handlers))
                 {
-                    _handlers = HandlerCollection.Create(type);
+                    _handlers = HandlerCollection.Create(type, _clientCodes);
                     _handlerCache.Add(type, _handlers);
                 }
             }
         }
 
+        private void InitCodes(CodeEnumDefinition typeDefinition)
+        {
+            lock (_clientCodeCache)
+            {
+                if (!_clientCodeCache.TryGetValue(typeDefinition.Client, out _clientCodes))
+                {
+                    _clientCodes = new CodeCollection(typeDefinition.Client);
+                    _clientCodeCache.Add(typeDefinition.Client, _clientCodes);
+                }
+            }
+
+            lock (_serverCodeCache)
+            {
+                if (!_serverCodeCache.TryGetValue(typeDefinition.Server, out _serverCodes))
+                {
+                    _serverCodes = new CodeCollection(typeDefinition.Server);
+                    _serverCodeCache.Add(typeDefinition.Server, _serverCodes);
+                }
+            }
+        }
+
+        #endregion
+
+        /// <summary>
+        /// Called when the WebSocket connection for a session has been established.
+        /// Sends an initialization message to the client.
+        /// </summary>
+        protected override void OnOpen()
+        {
+            SendInitMessage();
+        }
+
+        #region Init Message
+
+        private void SendInitMessage()
+        {
+            object codeInfo = GetCodeInfo();
+            SendJson(new { codeInfo });
+        }
+
+        private object GetCodeInfo()
+        {
+            if (UseNumericCodes)
+            {
+                return new
+                {
+                    numericCodes = true,
+                    client = _clientCodes?.ByName,
+                    server = _serverCodes?.ByName
+                };
+            }
+            else
+            {
+                return new
+                {
+                    numericCodes = false,
+                    client = _handlers.ByName.Keys,
+                };
+            }
+        }
+
+        #endregion
+
+        #region 'Missing' Helper
+
+        /// <summary>
+        /// Helper for checking if the <see cref="JToken"/> has the specified property, 
+        /// sending an error if the property is missing.
+        /// </summary>
+        /// <param name="token">The token to check.</param>
+        /// <param name="name">The name of the property.</param>
+        /// <param name="value">The found value in the token.</param>
+        /// <returns></returns>
         protected bool Missing(JToken token, string name, out JToken value)
         {
             if (token == null || (value = token[name]) == null)
             {
-                Send("Missing property '" + name + "'.");
+                SendError(token, "Missing property '" + name + "'.");
                 value = null;
                 return true;
             }
             return false;
         }
 
+        /// <summary>
+        /// Helper for checking if the <see cref="JArray"/> has an element at
+        /// the specified index, sending an error if the property is missing.
+        /// </summary>
+        /// <param name="array"></param>
+        /// <param name="name">The name of the property.</param>
+        /// <param name="value">The found value in the token.</param>
+        /// <returns></returns>
+        protected bool Missing(JArray array, int index, out JToken value)
+        {
+            if (array == null || (value = array[index]) == null)
+            {
+                SendError(array, "Missing value at index '" + index + "'.");
+                value = null;
+                return true;
+            }
+            return false;
+        }
+
+        #endregion
+
+        #region OnMessage and Send
+
+        /// <summary>
+        /// Called when the WebSocket instance for a session receives a message.
+        /// </summary>
+        /// <param name="e">
+        /// A <see cref="MessageEvent"/> that represents the event data passed
+        /// from a <see cref="WebSocket.OnMessage"/> event.
+        /// </param>
         protected override void OnMessage(MessageEvent e)
         {
             if (e.IsPing)
@@ -82,7 +197,10 @@ namespace WebSocketSharp.Server
             }
             catch (Exception ex)
             {
-                SendError(ex.Message);
+                reader.DiscardBufferedData();
+                reader.BaseStream.Position = 0;
+
+                SendError(reader.ReadToEnd(), ex.Message);
                 return;
             }
             finally
@@ -90,34 +208,40 @@ namespace WebSocketSharp.Server
                 RecyclableMemoryManager.Shared.ReturnReader(reader);
             }
 
-            var codeToken = obj[0];
-            if (codeToken == null)
+            if (obj == null) // this should never happen
             {
-                SendError($"Message code missing.");
+                SendError("Message was parsed as null.");
                 return;
             }
 
-            var bodyToken = obj[1];
-            if (bodyToken == null)
+            var codeToken = obj.Count > 0 ? obj[0] : null;
+            if (codeToken == null || codeToken.Type == JTokenType.Null)
             {
-                SendError($"Message body missing.");
+                SendError(obj, "Message code missing.");
                 return;
             }
 
-            void SendError_UnknownCode(string code) => SendError($"Unknown message code '{code}'");
+            var bodyToken = obj.Count > 1 ? obj[1] : null;
+            if (bodyToken == null || bodyToken.Type == JTokenType.Null)
+            {
+                SendError(obj, "Message body missing.");
+                return;
+            }
+
+            void SendError_UnknownCode() =>
+                SendError(obj, $"Message code '{codeToken}' is unknown.");
         
             switch (codeToken.Type)
             {
                 case JTokenType.String:
                 {
-                    var handlers = CaseSensitiveCodes ? _handlers.ByName : _handlers.ByNameIgnoreCase;
                     string code = codeToken.ToObject<string>();
-                    if (handlers.TryGetValue(code, out var handler))
+                    if (_handlers.ByName.TryGetValue(code, out var handler))
                     {
                         handler.Invoke(this, bodyToken);
                         break;
                     }
-                    SendError_UnknownCode(code);
+                    SendError_UnknownCode();
                     break;
                 }
 
@@ -126,7 +250,7 @@ namespace WebSocketSharp.Server
                     int code = codeToken.ToObject<int>();
                     if(code == -1)
                     {
-                        SendError("Message code '-1' is reserved.");
+                        SendError(obj, $"Message code '{codeToken}' is reserved.");
                         break;
                     }
                     if (_handlers.ByCode.TryGetValue(code, out var handler))
@@ -134,73 +258,67 @@ namespace WebSocketSharp.Server
                         handler.Invoke(this, bodyToken);
                         break;
                     }
-                    SendError_UnknownCode(code.ToString());
+                    SendError_UnknownCode();
                     break;
                 }
 
                 default:
-                    SendError($"Message code must be of type String or Integer.");
+                    SendError(obj, "Message code must be of type String or Integer.");
                     break;
             }
         }
 
-        private JsonTextWriter GetJsonMessageWriter(out StreamWriter writer)
-        {
-            AssertOpen();
-            var tmp = RecyclableMemoryManager.Shared.GetStream();
-            writer = new StreamWriter(tmp, Encoding.UTF8, 1024)
-            {
-                AutoFlush = false
-            };
-
-            var json = new JsonTextWriter(writer);
-            json.WriteStartArray();
-            return json;
-        }
-
-        private void FinishJsonMessage(JsonTextWriter json, StreamWriter writer)
-        {
-            json.WriteEndArray();
-            json.Flush();
-
-            var stream = writer.BaseStream;
-            stream.Position = 0;
-            Send(MessageFrameType.Text, stream, (int)stream.Length);
-        }
-
-        protected void SendAsJson(string key, object body, JsonSerializer serializer)
+        protected void SendJson(string key, object body, JsonSerializer serializer)
         {
             using (var json = GetJsonMessageWriter(out var stream))
             {
+                json.WriteStartArray();
                 json.WriteValue(key);
-                serializer.Serialize(json, body);
+                if (body != null)
+                    serializer.Serialize(json, body);
+                json.WriteEndArray();
+
                 FinishJsonMessage(json, stream);
             }
         }
 
-        protected void SendAsJson(int key, object body, JsonSerializer serializer)
+        protected void SendJson(string key, object body)
+        {
+            SendJson(key, body, DefaultSerializer);
+        }
+
+        protected void SendJson(int key, object body, JsonSerializer serializer)
         {
             using (var json = GetJsonMessageWriter(out var stream))
             {
+                json.WriteStartArray();
                 json.WriteValue(key);
-                serializer.Serialize(json, body);
+                if(body != null)
+                    serializer.Serialize(json, body);
+                json.WriteEndArray();
+
                 FinishJsonMessage(json, stream);
             }
         }
 
-        protected void SendAsJson(string key, object body)
+        protected void SendJson(int key, object body)
         {
-            SendAsJson(key, body, _defaultSerializer);
+            SendJson(key, body, DefaultSerializer);
         }
 
-        protected void SendAsJson(int key, object body)
+        protected void SendError(object message)
         {
-            SendAsJson(key, body, _defaultSerializer);
+            SendJson(-1, message);
         }
 
-        protected void SendError(string message)
+        protected void SendError(object source, object message)
         {
-            SendAsJson("error", message);
+            if (VerboseDebug)
+                SendError(new { source, message });
+            else
+                SendError(message);
         }
+
+        #endregion
     }
 }

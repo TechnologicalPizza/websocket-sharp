@@ -62,7 +62,6 @@ namespace WebSocketSharp.Net
         #region Private Fields
 
         private byte[] _buffer;
-        private const int _bufferLength = 8192;
         private HttpListenerContext _context;
         private bool _contextRegistered;
         private StringBuilder _currentLine;
@@ -94,22 +93,18 @@ namespace WebSocketSharp.Net
             _socket = socket;
             _listener = listener;
 
-            var netStream = new NetworkStream(socket, false);
+            var netStream = new NetworkStream(socket, ownsSocket: false);
             if (listener.IsSecure)
             {
                 var sslConf = listener.SslConfiguration;
                 var sslStream = new SslStream(
-                                  netStream,
-                                  false,
-                                  sslConf.ClientCertificateValidationCallback
-                                );
+                    netStream, false, sslConf.ClientCertificateValidationCallback);
 
                 sslStream.AuthenticateAsServer(
-                  sslConf.ServerCertificate,
-                  sslConf.ClientCertificateRequired,
-                  sslConf.EnabledSslProtocols,
-                  sslConf.CheckCertificateRevocation
-                );
+                    sslConf.ServerCertificate,
+                    sslConf.ClientCertificateRequired,
+                    sslConf.EnabledSslProtocols,
+                    sslConf.CheckCertificateRevocation);
 
                 _secure = true;
                 _stream = sslStream;
@@ -125,6 +120,7 @@ namespace WebSocketSharp.Net
             _timeout = 90000; // 90k ms for first request, 15k ms from then on.
             _timeoutCanceled = new Dictionary<int, bool>();
             _timer = new Timer(OnTimeout, this, Timeout.Infinite, Timeout.Infinite);
+            _requestBuffer = RecyclableMemoryManager.Shared.GetStream("HttpConnection._requestBuffer");
 
             Init();
         }
@@ -134,17 +130,13 @@ namespace WebSocketSharp.Net
         #region Public Properties
 
         public bool IsClosed => _socket == null;
-
         public bool IsLocal => ((IPEndPoint)_remoteEndPoint).Address.IsLocal();
-
         public bool IsSecure => _secure;
 
         public IPEndPoint LocalEndPoint => (IPEndPoint)_localEndPoint;
-
         public IPEndPoint RemoteEndPoint => (IPEndPoint)_remoteEndPoint;
 
         public int Reuses => _reuses;
-
         public Stream Stream => _stream;
 
         #endregion
@@ -159,7 +151,7 @@ namespace WebSocketSharp.Net
                     return;
 
                 DisposeTimer();
-                DisposeRequestBuffer();
+                DisposeBuffers();
                 DisposeStream();
                 CloseSocket();
             }
@@ -177,16 +169,19 @@ namespace WebSocketSharp.Net
             catch
             {
             }
-
             _socket.Close();
             _socket = null;
         }
 
-        private void DisposeRequestBuffer()
+        private void DisposeBuffers()
         {
-            if (_requestBuffer == null)
-                return;
-            _requestBuffer.Dispose();
+            if (_buffer != null)
+            {
+                RecyclableMemoryManager.Shared.ReturnBlock(_buffer);
+                _buffer = null;
+            }
+
+            _requestBuffer?.Dispose();
             _requestBuffer = null;
         }
 
@@ -198,15 +193,11 @@ namespace WebSocketSharp.Net
             _stream?.Dispose();
             _stream = null;
 
-            _stream = null;
             _outputStream = null;
         }
 
         private void DisposeTimer()
         {
-            if (_timer == null)
-                return;
-
             try
             {
                 _timer.Change(Timeout.Infinite, Timeout.Infinite);
@@ -214,7 +205,6 @@ namespace WebSocketSharp.Net
             catch
             {
             }
-
             _timer.Dispose();
             _timer = null;
         }
@@ -227,7 +217,9 @@ namespace WebSocketSharp.Net
             _lineState = LineState.None;
             _outputStream = null;
             _position = 0;
-            _requestBuffer = RecyclableMemoryManager.Shared.GetStream();
+
+            _requestBuffer.Position = 0;
+            _requestBuffer.SetLength(0);
         }
 
         private static void OnRead(IAsyncResult asyncResult)
@@ -313,7 +305,7 @@ namespace WebSocketSharp.Net
                     return;
                 }
 
-                conn._stream.BeginRead(conn._buffer, 0, _bufferLength, OnRead, conn);
+                conn._stream.BeginRead(conn._buffer, 0, conn._buffer.Length, OnRead, conn);
             }
         }
 
@@ -474,7 +466,6 @@ namespace WebSocketSharp.Net
                     return;
                 }
 
-                DisposeRequestBuffer();
                 UnregisterContext();
                 Init();
 
@@ -490,7 +481,7 @@ namespace WebSocketSharp.Net
         public void BeginReadRequest()
         {
             if (_buffer == null)
-                _buffer = new byte[_bufferLength];
+                _buffer = RecyclableMemoryManager.Shared.GetBlock();
 
             if (_reuses == 1)
                 _timeout = 15000;
@@ -499,7 +490,7 @@ namespace WebSocketSharp.Net
             {
                 _timeoutCanceled.Add(_reuses, false);
                 _timer.Change(_timeout, Timeout.Infinite);
-                _stream.BeginRead(_buffer, 0, _bufferLength, OnRead, this);
+                _stream.BeginRead(_buffer, 0, _buffer.Length, OnRead, this);
             }
             catch
             {
@@ -522,17 +513,25 @@ namespace WebSocketSharp.Net
                 if (_inputStream != null)
                     return _inputStream;
 
-                var requestBuff = _requestBuffer;
-                var buff = _requestBuffer.GetBuffer();
-                var len = (int)_requestBuffer.Length;
-                var cnt = len - _position;
-                _requestBuffer = null;
+                try
+                {
+                    var len = (int)_requestBuffer.Length;
+                    var cnt = len - _position;
+                    _inputStream = chunked
+                        ? new ChunkedRequestStream(_stream, _requestBuffer, _position, cnt, _context)
+                        : new RequestStream(_stream, _requestBuffer, _position, cnt, contentLength);
 
-                _inputStream = chunked
-                    ? new ChunkedRequestStream(_stream, requestBuff, _position, cnt, _context)
-                    : new RequestStream(_stream, requestBuff, _position, cnt, contentLength);
-
-                return _inputStream;
+                    return _inputStream;
+                }
+                catch
+                {
+                    _requestBuffer?.Dispose();
+                    throw;
+                }
+                finally
+                {
+                    _requestBuffer = null;
+                }
             }
         }
 
@@ -577,19 +576,20 @@ namespace WebSocketSharp.Net
                     res.StatusCode = status;
                     res.ContentType = "text/html";
 
-                    var content = new StringBuilder(64);
-                    content.AppendFormat("<html><body><h1>{0} {1}", status, res.StatusDescription);
-                    if (message != null && message.Length > 0)
-                        content.AppendFormat(" ({0})</h1></body></html>", message);
-                    else
-                        content.Append("</h1></body></html>");
+                    using (var tmp = RecyclableMemoryManager.Shared.GetStream())
+                    using (var writer = new StreamWriter(tmp, Ext.PlainUTF8))
+                    {
+                        writer.Write("<html><body><h1>{0} {1}", status, res.StatusDescription);
+                        if (message != null && message.Length > 0)
+                            writer.Write(" ({0})</h1></body></html>", message);
+                        else
+                            writer.Write("</h1></body></html>");
+                        writer.Flush();
 
-                    var enc = Encoding.UTF8;
-                    var entity = enc.GetBytes(content.ToString());
-                    res.ContentEncoding = enc;
-                    res.ContentLength64 = entity.LongLength;
-
-                    res.Close(entity, true);
+                        res.ContentEncoding = writer.Encoding;
+                        res.ContentLength64 = tmp.Length;
+                        res.Close(tmp);
+                    }
                 }
                 catch
                 {

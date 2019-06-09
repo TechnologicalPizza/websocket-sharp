@@ -175,17 +175,15 @@ namespace WebSocketSharp.Net
 
         protected override void Dispose(bool disposing)
         {
-            if (IsDisposed)
-                return;
-
-            if (disposing)
+            if (!IsDisposed)
             {
-                _buffer?.Dispose();
-                _buffer = null;
+                if (disposing)
+                {
+                    _buffer?.Dispose();
+                    _buffer = null;
+                }
+                IsDisposed = true;
             }
-
-            base.Dispose(disposing);
-            IsDisposed = true;
         }
 
         public override int EndRead(IAsyncResult asyncResult)
@@ -194,7 +192,7 @@ namespace WebSocketSharp.Net
                 throw new ObjectDisposedException(GetType().ToString());
 
             if (asyncResult == null)
-                throw new ArgumentNullException("asyncResult");
+                throw new ArgumentNullException(nameof(asyncResult));
 
             if (asyncResult is HttpStreamAsyncResult ares)
             {

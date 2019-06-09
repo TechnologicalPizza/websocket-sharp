@@ -10,6 +10,17 @@ namespace WebSocketSharp.Server
 
         public MessageHandlerAttribute()
         {
+            Code = -1;
+        }
+
+        public MessageHandlerAttribute(int code)
+        {
+            Code = code;
+        }
+
+        public MessageHandlerAttribute(string name)
+        {
+            Name = name;
         }
     }
 }

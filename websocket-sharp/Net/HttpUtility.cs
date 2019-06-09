@@ -663,7 +663,7 @@ namespace WebSocketSharp.Net
         {
             if (b > 31 && b < 127)
             {
-                var c = (char)b;
+                char c = (char)b;
                 if (c == ' ')
                 {
                     output.WriteByte((byte)'+');
@@ -689,14 +689,14 @@ namespace WebSocketSharp.Net
                 }
             }
 
-            var i = (int)b;
-            var bytes = new byte[] {
-                    (byte) '%',
-                    (byte) _hexChars[i >> 4],
-                    (byte) _hexChars[i & 0x0F]
-                  };
-
-            output.Write(bytes, 0, 3);
+            int i = b;
+            Span<byte> bytes = stackalloc byte[3]
+            {
+                (byte)'%',
+                (byte)_hexChars[i >> 4],
+                (byte)_hexChars[i & 0x0F]
+            };
+            output.Write(bytes);
         }
 
         private static RecyclableMemoryStream InternalUrlEncodeToBytes(byte[] bytes, int offset, int count)

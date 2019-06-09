@@ -87,9 +87,9 @@ namespace WebSocketSharp
         private string _extensions;
         private bool _extensionsRequested;
         private object _messageEventQueueMutex;
-        private object _forPing;
-        private object _forSend;
-        private object _forState;
+        private object _forPing = new object();
+        private object _forSend = new object();
+        private object _forState = new object();
         private RecyclableMemoryStream _fragmentsBuffer;
         private bool _fragmentsCompressed;
         private OpCode _fragmentsOpcode;
@@ -147,6 +147,8 @@ namespace WebSocketSharp
 
         #endregion
 
+        #region Constructors
+
         #region Static Constructor
 
         static WebSocket()
@@ -158,10 +160,23 @@ namespace WebSocketSharp
 
         #endregion
 
+        #region Private Constructor
+
+        private WebSocket()
+        {
+            _compression = CompressionMethod.None;
+            _readyState = WebSocketState.Connecting;
+            _cookies = new CookieCollection();
+            _messageEventQueue = new Queue<MessageEvent>();
+            _messageEventQueueMutex = ((ICollection)_messageEventQueue).SyncRoot;
+        }
+
+        #endregion
+
         #region Internal Constructors
 
         // As server
-        internal WebSocket(HttpListenerWebSocketContext context, string protocol)
+        internal WebSocket(HttpListenerWebSocketContext context, string protocol) : this()
         {
             _context = context;
             _protocol = protocol;
@@ -172,12 +187,10 @@ namespace WebSocketSharp
             _isSecure = context.IsSecureConnection;
             _stream = context.Stream;
             _waitTime = TimeSpan.FromSeconds(1);
-
-            Init();
         }
 
         // As server
-        internal WebSocket(TcpListenerWebSocketContext context, string protocol)
+        internal WebSocket(TcpListenerWebSocketContext context, string protocol) : this()
         {
             _context = context;
             _protocol = protocol;
@@ -188,8 +201,6 @@ namespace WebSocketSharp
             _isSecure = context.IsSecureConnection;
             _stream = context.Stream;
             _waitTime = TimeSpan.FromSeconds(1);
-
-            Init();
         }
 
         #endregion
@@ -248,22 +259,21 @@ namespace WebSocketSharp
         ///   <paramref name="protocols"/> contains a value twice.
         ///   </para>
         /// </exception>
-        public WebSocket(string url, params string[] protocols)
+        public WebSocket(string url, params string[] protocols) : this()
         {
             if (url == null)
-                throw new ArgumentNullException("url");
+                throw new ArgumentNullException(nameof(url));
 
             if (url.Length == 0)
-                throw new ArgumentException("An empty string.", "url");
+                throw new ArgumentException("An empty string.", nameof(url));
 
             if (!url.TryCreateWebSocketUri(out _uri, out string msg))
-                throw new ArgumentException(msg, "url");
+                throw new ArgumentException(msg, nameof(url));
 
             if (protocols != null && protocols.Length > 0)
             {
                 if (!CheckProtocols(protocols, out msg))
-                    throw new ArgumentException(msg, "protocols");
-
+                    throw new ArgumentException(msg, nameof(protocols));
                 _protocols = protocols;
             }
 
@@ -273,11 +283,11 @@ namespace WebSocketSharp
             _message = MessageClient;
             _isSecure = _uri.Scheme == "wss";
             _waitTime = TimeSpan.FromSeconds(5);
-
-            Init();
         }
 
         #endregion
+
+        #endregion Constructors
 
         #region Internal Properties
 
@@ -311,6 +321,8 @@ namespace WebSocketSharp
         #endregion
 
         #region Public Properties
+
+        public object StateSyncRoot => _forState;
 
         /// <summary>
         /// Gets or sets the compression method used to compress a message.
@@ -1353,18 +1365,6 @@ namespace WebSocketSharp
                 _sslConfig = new ClientSslConfiguration(_uri.DnsSafeHost);
 
             return _sslConfig;
-        }
-
-        private void Init()
-        {
-            _compression = CompressionMethod.None;
-            _cookies = new CookieCollection();
-            _forPing = new object();
-            _forSend = new object();
-            _forState = new object();
-            _messageEventQueue = new Queue<MessageEvent>();
-            _messageEventQueueMutex = ((ICollection)_messageEventQueue).SyncRoot;
-            _readyState = WebSocketState.Connecting;
         }
 
         private void Message()
@@ -3252,11 +3252,10 @@ namespace WebSocketSharp
             AssertOpen();
 
             using (var tmp = RecyclableMemoryManager.Shared.GetStream())
-            using (var writer = new StreamWriter(tmp, Encoding.UTF8))
+            using (var writer = new StreamWriter(tmp, Ext.PlainUTF8))
             {
                 serializer.Serialize(writer, value);
                 writer.Flush();
-
                 tmp.Position = 0;
                 Send(MessageFrameType.Text, tmp, (int)tmp.Length);
             }
@@ -3342,11 +3341,10 @@ namespace WebSocketSharp
                 throw new ArgumentNullException(nameof(text));
 
             using (var tmp = RecyclableMemoryManager.Shared.GetStream())
-            using (var writer = new StreamWriter(tmp, Encoding.UTF8))
+            using (var writer = new StreamWriter(tmp, Ext.PlainUTF8))
             {
                 writer.Write(text);
                 writer.Flush();
-
                 tmp.Position = 0;
                 InternalSend(OpCode.Text, tmp);
             }
@@ -3518,7 +3516,7 @@ namespace WebSocketSharp
                 throw new ArgumentNullException(nameof(text));
 
             using (var tmp = RecyclableMemoryManager.Shared.GetStream())
-            using (var writer = new StreamWriter(tmp, Encoding.UTF8))
+            using (var writer = new StreamWriter(tmp, Ext.PlainUTF8))
             {
                 writer.Write(text);
                 writer.Flush();

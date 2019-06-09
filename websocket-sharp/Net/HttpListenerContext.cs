@@ -54,13 +54,6 @@ namespace WebSocketSharp.Net
     {
         #region Private Fields
 
-        private HttpConnection _connection;
-        private string _error;
-        private int _errorStatus;
-        private HttpListener _listener;
-        private HttpListenerRequest _request;
-        private HttpListenerResponse _response;
-        private IPrincipal _user;
         private HttpListenerWebSocketContext _websocketContext;
 
         #endregion
@@ -69,40 +62,25 @@ namespace WebSocketSharp.Net
 
         internal HttpListenerContext(HttpConnection connection)
         {
-            _connection = connection;
-            _errorStatus = 400;
-            _request = new HttpListenerRequest(this);
-            _response = new HttpListenerResponse(this);
+            Connection = connection;
+            ErrorStatus = 400;
+            Request = new HttpListenerRequest(this);
+            Response = new HttpListenerResponse(this);
         }
 
         #endregion
 
         #region Internal Properties
 
-        internal HttpConnection Connection => _connection;
+        internal HttpConnection Connection { get; }
 
-        internal string ErrorMessage
-        {
-            get => _error;
+        internal string ErrorMessage { get; set; }
 
-            set => _error = value;
-        }
+        internal int ErrorStatus { get; set; }
 
-        internal int ErrorStatus
-        {
-            get => _errorStatus;
+        internal bool HasError => ErrorMessage != null;
 
-            set => _errorStatus = value;
-        }
-
-        internal bool HasError => _error != null;
-
-        internal HttpListener Listener
-        {
-            get => _listener;
-
-            set => _listener = value;
-        }
+        internal HttpListener Listener { get; set; }
 
         #endregion
 
@@ -114,7 +92,7 @@ namespace WebSocketSharp.Net
         /// <value>
         /// A <see cref="HttpListenerRequest"/> that represents the client request.
         /// </value>
-        public HttpListenerRequest Request => _request;
+        public HttpListenerRequest Request { get; }
 
         /// <summary>
         /// Gets the HTTP response object used to send a response to the client.
@@ -122,7 +100,7 @@ namespace WebSocketSharp.Net
         /// <value>
         /// A <see cref="HttpListenerResponse"/> that represents a response to the client request.
         /// </value>
-        public HttpListenerResponse Response => _response;
+        public HttpListenerResponse Response { get; }
 
         /// <summary>
         /// Gets the client information (identity, authentication, and security roles).
@@ -130,7 +108,7 @@ namespace WebSocketSharp.Net
         /// <value>
         /// A <see cref="IPrincipal"/> instance that represents the client information.
         /// </value>
-        public IPrincipal User => _user;
+        public IPrincipal User { get; private set; }
 
         #endregion
 
@@ -138,44 +116,42 @@ namespace WebSocketSharp.Net
 
         internal bool Authenticate()
         {
-            var schm = _listener.SelectAuthenticationScheme(_request);
+            var schm = Listener.SelectAuthenticationScheme(Request);
             if (schm == AuthenticationSchemes.Anonymous)
                 return true;
 
             if (schm == AuthenticationSchemes.None)
             {
-                _response.Close(HttpStatusCode.Forbidden);
+                Response.Close(HttpStatusCode.Forbidden);
                 return false;
             }
 
-            var realm = _listener.GetRealm();
-            var user =
-              HttpUtility.CreateUser(
-                _request.Headers["Authorization"],
-                schm,
-                realm,
-                _request.HttpMethod,
-                _listener.GetUserCredentialsFinder()
-              );
+            var realm = Listener.GetRealm();
+            var user = HttpUtility.CreateUser(
+                  Request.Headers["Authorization"],
+                  schm,
+                  realm,
+                  Request.HttpMethod,
+                  Listener.GetUserCredentialsFinder());
 
             if (user == null || !user.Identity.IsAuthenticated)
             {
-                _response.CloseWithAuthChallenge(new AuthenticationChallenge(schm, realm).ToString());
+                Response.CloseWithAuthChallenge(new AuthenticationChallenge(schm, realm).ToString());
                 return false;
             }
 
-            _user = user;
+            User = user;
             return true;
         }
 
         internal bool Register()
         {
-            return _listener.RegisterContext(this);
+            return Listener.RegisterContext(this);
         }
 
         internal void Unregister()
         {
-            _listener.UnregisterContext(this);
+            Listener.UnregisterContext(this);
         }
 
         #endregion
@@ -215,10 +191,10 @@ namespace WebSocketSharp.Net
             if (protocol != null)
             {
                 if (protocol.Length == 0)
-                    throw new ArgumentException("An empty string.", "protocol");
+                    throw new ArgumentException("An empty string.", nameof(protocol));
 
                 if (!protocol.IsToken())
-                    throw new ArgumentException("Contains an invalid character.", "protocol");
+                    throw new ArgumentException("Contains an invalid character.", nameof(protocol));
             }
 
             _websocketContext = new HttpListenerWebSocketContext(this, protocol.ToString());

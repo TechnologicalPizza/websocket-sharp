@@ -44,6 +44,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Security.Permissions;
@@ -819,21 +820,20 @@ namespace WebSocketSharp.Net
             return info != null && info.IsMultiValue(response);
         }
 
-        internal string ToStringMultiValue(bool response)
+        internal void WriteTo(StreamWriter writer, bool response)
         {
-            var buff = new StringBuilder();
             int n = Count;
             for (int i = 0; i < n; i++)
             {
                 string key = GetKey(i);
                 if (IsMultiValue(key.AsSpan(), response))
                     foreach (string val in GetValues(i))
-                        buff.AppendFormat("{0}: {1}\r\n", key, val);
+                        writer.Write("{0}: {1}\r\n", key, val);
                 else
-                    buff.AppendFormat("{0}: {1}\r\n", key, Get(i));
+                    writer.Write("{0}: {1}\r\n", key, Get(i));
             }
 
-            return buff.Append("\r\n").ToString();
+            writer.Write("\r\n");
         }
 
         #endregion

@@ -56,7 +56,6 @@ namespace WebSocketSharp.Server
         private volatile ServerState _state;
         private volatile bool _sweeping;
         private System.Timers.Timer _sweepTimer;
-        private object _sync;
         private TimeSpan _waitTime;
 
         #endregion
@@ -71,7 +70,7 @@ namespace WebSocketSharp.Server
             _forSweep = new object();
             _sessions = new Dictionary<string, IWebSocketSession>();
             _state = ServerState.Ready;
-            _sync = ((ICollection)_sessions).SyncRoot;
+            SyncRoot = ((ICollection)_sessions).SyncRoot;
             _waitTime = TimeSpan.FromSeconds(1);
 
             SetSweepTimer(60000);
@@ -86,6 +85,8 @@ namespace WebSocketSharp.Server
         #endregion
 
         #region Public Properties
+
+        public object SyncRoot { get; }
 
         /// <summary>
         /// Gets the IDs for the active sessions in the service.
@@ -121,7 +122,7 @@ namespace WebSocketSharp.Server
         {
             get
             {
-                lock (_sync)
+                lock (SyncRoot)
                     return _sessions.Count;
             }
         }
@@ -143,7 +144,7 @@ namespace WebSocketSharp.Server
             if (_state != ServerState.Start)
                 return null;
 
-            lock (_sync)
+            lock (SyncRoot)
             {
                 if (_state != ServerState.Start)
                     return null;
@@ -229,7 +230,6 @@ namespace WebSocketSharp.Server
         public bool KeepClean
         {
             get => _clean;
-
             set
             {
                 if (!CanSet(out string msg))
@@ -238,7 +238,7 @@ namespace WebSocketSharp.Server
                     return;
                 }
 
-                lock (_sync)
+                lock (SyncRoot)
                 {
                     if (!CanSet(out msg))
                     {
@@ -268,7 +268,7 @@ namespace WebSocketSharp.Server
             if (_state != ServerState.Start)
                 return null;
 
-            lock (_sync)
+            lock (SyncRoot)
             {
                 if (_state != ServerState.Start)
                     return null;
@@ -294,11 +294,10 @@ namespace WebSocketSharp.Server
         public TimeSpan WaitTime
         {
             get => _waitTime;
-
             set
             {
                 if (value <= TimeSpan.Zero)
-                    throw new ArgumentOutOfRangeException("value", "Zero or less.");
+                    throw new ArgumentOutOfRangeException(nameof(value), "Zero or less.");
 
                 if (!CanSet(out string msg))
                 {
@@ -306,7 +305,7 @@ namespace WebSocketSharp.Server
                     return;
                 }
 
-                lock (_sync)
+                lock (SyncRoot)
                 {
                     if (!CanSet(out msg))
                     {
@@ -452,7 +451,7 @@ namespace WebSocketSharp.Server
 
             try
             {
-                lock (_sync)
+                lock (SyncRoot)
                 {
                     _state = ServerState.ShuttingDown;
 
@@ -476,7 +475,7 @@ namespace WebSocketSharp.Server
                 session = null;
                 return false;
             }
-            lock (_sync)
+            lock (SyncRoot)
             {
                 if (_state != ServerState.Start)
                 {
@@ -493,7 +492,7 @@ namespace WebSocketSharp.Server
 
         internal string Add(IWebSocketSession session)
         {
-            lock (_sync)
+            lock (SyncRoot)
             {
                 if (_state != ServerState.Start)
                     return null;
@@ -507,13 +506,13 @@ namespace WebSocketSharp.Server
 
         internal bool Remove(string id)
         {
-            lock (_sync)
+            lock (SyncRoot)
                 return _sessions.Remove(id);
         }
 
         internal void Start()
         {
-            lock (_sync)
+            lock (SyncRoot)
             {
                 _sweepTimer.Enabled = _clean;
                 _state = ServerState.Start;
@@ -1488,7 +1487,7 @@ namespace WebSocketSharp.Server
                 if (_state != ServerState.Start)
                     break;
 
-                lock (_sync)
+                lock (SyncRoot)
                 {
                     if (_state != ServerState.Start)
                         break;

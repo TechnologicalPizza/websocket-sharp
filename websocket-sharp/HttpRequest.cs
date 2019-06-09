@@ -198,7 +198,7 @@ namespace WebSocketSharp
             var result = RecyclableMemoryManager.Shared.GetStream();
             try
             {
-                var writer = new StreamWriter(result, Encoding.UTF8);
+                var writer = new StreamWriter(result, Ext.PlainUTF8);
                 writer.Write("{0} {1} HTTP/{2}{3}", _method, _uri, ProtocolVersion, CrLf);
 
                 var headers = Headers;

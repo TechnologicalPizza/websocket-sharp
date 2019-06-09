@@ -49,6 +49,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Reflection;
 using System.Text;
 
 namespace WebSocketSharp.Net
@@ -61,6 +62,9 @@ namespace WebSocketSharp.Net
     /// </remarks>
     public sealed class HttpListenerResponse : IDisposable
     {
+        public static readonly string ServerHeader =
+            "websocket-sharp/" + Assembly.GetAssembly(typeof(HttpListenerResponse)).GetName().Version.ToString(2);
+
         #region Private Fields
 
         private static readonly char[] StatusInvalidChars = new[] { '\r', '\n' };
@@ -156,12 +160,11 @@ namespace WebSocketSharp.Net
         public long ContentLength64
         {
             get => _contentLength;
-
             set
             {
                 AssertNotDisposedOrHeadersSent();
                 if (value < 0)
-                    throw new ArgumentOutOfRangeException("Less than zero.", "value");
+                    throw new ArgumentOutOfRangeException("Less than zero.", nameof(value));
 
                 _contentLength = value;
             }
@@ -220,7 +223,6 @@ namespace WebSocketSharp.Net
         public WebHeaderCollection Headers
         {
             get => _headers ?? (_headers = new WebHeaderCollection(HttpHeaderType.Response, false));
-
             set
             {
                 if (value != null && value.State != HttpHeaderType.Response)
@@ -524,14 +526,17 @@ namespace WebSocketSharp.Net
             }
 
             if (headers["Server"] == null)
-                headers.InternalSet("Server", "websocket-sharp/1.0", true);
+                headers.InternalSet("Server", ServerHeader, true);
 
             var prov = CultureInfo.InvariantCulture;
             if (headers["Date"] == null)
                 headers.InternalSet("Date", DateTime.UtcNow.ToString("r", prov), true);
 
             if (!_sendChunked)
-                headers.InternalSet("Content-Length", _contentLength.ToString(prov), true);
+            {
+                if(_contentLength != 0)
+                    headers.InternalSet("Content-Length", _contentLength.ToString(prov), true);
+            }
             else
                 headers.InternalSet("Transfer-Encoding", "chunked", true);
 
@@ -563,7 +568,7 @@ namespace WebSocketSharp.Net
             else
             {
                 headers.InternalSet(
-                  "Keep-Alive", string.Format("timeout=15,max={0}", 100 - reuses), true);
+                    "Keep-Alive", string.Format("timeout=15,max={0}", 100 - reuses), true);
 
                 if (_context.Request.ProtocolVersion < HttpVersion.Version11)
                     headers.InternalSet("Connection", "keep-alive", true);
@@ -579,7 +584,7 @@ namespace WebSocketSharp.Net
             var enc = _contentEncoding ?? Encoding.Default;
             var writer = new StreamWriter(destination, enc, 512);
             writer.Write("HTTP/{0} {1} {2}\r\n", _version, _statusCode, _statusDescription);
-            writer.Write(headers.ToStringMultiValue(true));
+            headers.WriteTo(writer, true);
             writer.Flush();
 
             // Assumes that the destination was at position 0.
@@ -695,7 +700,6 @@ namespace WebSocketSharp.Net
         {
             if (_disposed)
                 return;
-
             Close(false);
         }
 
@@ -720,7 +724,7 @@ namespace WebSocketSharp.Net
         {
             AssertNotDisposed();
             if (responseEntity == null)
-                throw new ArgumentNullException("responseEntity");
+                throw new ArgumentNullException(nameof(responseEntity));
 
             var len = responseEntity.Length;
             var output = OutputStream;
@@ -728,20 +732,41 @@ namespace WebSocketSharp.Net
             {
                 output.Write(responseEntity, 0, len);
                 Close(false);
-
-                return;
             }
+            else
+            {
+                output.BeginWrite(
+                    responseEntity, 0, len,
+                    ar =>
+                    {
+                        output.EndWrite(ar);
+                        Close(false);
+                    },
+                    null);
+            }
+        }
 
-            output.BeginWrite(
-              responseEntity,
-              0,
-              len,
-              ar =>
-              {
-                  output.EndWrite(ar);
-                  Close(false);
-              },
-              null);
+        /// <summary>
+        /// Synchronously returns the response with the specified <see cref="Stream"/> to the 
+        /// client and releases the resources used by this <see cref="HttpListenerResponse"/> instance.
+        /// </summary>
+        /// <param name="responseEntity">
+        /// A <see cref="Stream"/> that contains the response entity body data.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="responseEntity"/> is <see langword="null"/>.
+        /// </exception>
+        /// <exception cref="ObjectDisposedException">
+        /// This object is closed.
+        /// </exception>
+        public void Close(Stream responseEntity)
+        {
+            AssertNotDisposed();
+            if (responseEntity == null)
+                throw new ArgumentNullException(nameof(responseEntity));
+
+            OutputStream.Write(responseEntity, responseEntity.Length);
+            Close(false);
         }
 
         /// <summary>
@@ -832,10 +857,10 @@ namespace WebSocketSharp.Net
         public void SetCookie(Cookie cookie)
         {
             if (cookie == null)
-                throw new ArgumentNullException("cookie");
+                throw new ArgumentNullException(nameof(cookie));
 
             if (!CanAddOrUpdate(cookie))
-                throw new ArgumentException("Cannot be replaced.", "cookie");
+                throw new ArgumentException("Cannot be replaced.", nameof(cookie));
 
             Cookies.Add(cookie);
         }

@@ -31,6 +31,7 @@ using System;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
+using WebSocketSharp.Memory;
 using WebSocketSharp.Net;
 using WebSocketSharp.Net.WebSockets;
 
@@ -48,18 +49,20 @@ namespace WebSocketSharp.Server
     {
         #region Private Fields
 
-        private WebSocketContext _context;
-        private Func<CookieCollection, CookieCollection, bool> _cookiesValidator;
         private bool _emitOnPing;
-        private string _id;
-        private bool _ignoreExtensions;
-        private Func<string, bool> _originValidator;
         private string _protocol;
-        private WebSocketSessionManager _sessions;
-        private DateTime _startTime;
         private WebSocket _websocket;
 
         #endregion
+
+        static WebSocketBehavior()
+        {
+            DefaultSerializer = JsonSerializer.Create(new JsonSerializerSettings
+            {
+                NullValueHandling = NullValueHandling.Ignore,
+                Formatting = Formatting.None
+            });
+        }
 
         #region Protected Constructors
 
@@ -68,7 +71,7 @@ namespace WebSocketSharp.Server
         /// </summary>
         protected WebSocketBehavior()
         {
-            _startTime = DateTime.MaxValue;
+            StartTime = DateTime.MaxValue;
         }
 
         #endregion
@@ -86,7 +89,7 @@ namespace WebSocketSharp.Server
         ///   <see langword="null"/> if the session has not started yet.
         ///   </para>
         /// </value>
-        protected NameValueCollection Headers => _context?.Headers;
+        protected NameValueCollection Headers => Context?.Headers;
 
         /// <summary>
         /// Gets the logging function.
@@ -117,7 +120,7 @@ namespace WebSocketSharp.Server
         ///   <see langword="null"/> if the session has not started yet.
         ///   </para>
         /// </value>
-        protected NameValueCollection QueryString => _context?.QueryString;
+        protected NameValueCollection QueryString => Context?.QueryString;
 
         /// <summary>
         /// Gets the management function for the sessions in the service.
@@ -131,11 +134,17 @@ namespace WebSocketSharp.Server
         ///   <see langword="null"/> if the session has not started yet.
         ///   </para>
         /// </value>
-        protected WebSocketSessionManager Sessions => _sessions;
+        protected WebSocketSessionManager Sessions { get; private set; }
 
         #endregion
 
         #region Public Properties
+
+        /// <summary>
+        /// Gets the default serializer used for methods that do not take a
+        /// <see cref="JsonSerializer"/> as an argument.
+        /// </summary>
+        public static JsonSerializer DefaultSerializer { get; }
 
         /// <summary>
         /// Gets the current state of the WebSocket connection for a session.
@@ -152,12 +161,8 @@ namespace WebSocketSharp.Server
         ///   started yet.
         ///   </para>
         /// </value>
-        public WebSocketState ConnectionState
-        {
-            get => _websocket != null
-                     ? _websocket.ReadyState
-                     : WebSocketState.Connecting;
-        }
+        public WebSocketState ConnectionState => _websocket != null ?
+            _websocket.ReadyState : WebSocketState.Connecting;
 
         /// <summary>
         /// Gets the information in a WebSocket handshake request to the service.
@@ -171,7 +176,7 @@ namespace WebSocketSharp.Server
         ///   <see langword="null"/> if the session has not started yet.
         ///   </para>
         /// </value>
-        public WebSocketContext Context => _context;
+        public WebSocketContext Context { get; private set; }
 
         /// <summary>
         /// Gets or sets the delegate used to validate the HTTP cookies included in
@@ -201,12 +206,7 @@ namespace WebSocketSharp.Server
         ///   The default value is <see langword="null"/>.
         ///   </para>
         /// </value>
-        public Func<CookieCollection, CookieCollection, bool> CookiesValidator
-        {
-            get => _cookiesValidator;
-
-            set => _cookiesValidator = value;
-        }
+        public Func<CookieCollection, CookieCollection, bool> CookiesValidator { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether the WebSocket instance for
@@ -224,7 +224,6 @@ namespace WebSocketSharp.Server
         public bool EmitOnPing
         {
             get => _websocket != null ? _websocket.EmitOnPing : _emitOnPing;
-
             set
             {
                 if (_websocket != null)
@@ -232,7 +231,6 @@ namespace WebSocketSharp.Server
                     _websocket.EmitOnPing = value;
                     return;
                 }
-
                 _emitOnPing = value;
             }
         }
@@ -248,7 +246,7 @@ namespace WebSocketSharp.Server
         ///   <see langword="null"/> if the session has not started yet.
         ///   </para>
         /// </value>
-        public string ID => _id;
+        public string ID { get; private set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether the service ignores
@@ -264,12 +262,7 @@ namespace WebSocketSharp.Server
         ///   The default value is <c>false</c>.
         ///   </para>
         /// </value>
-        public bool IgnoreExtensions
-        {
-            get => _ignoreExtensions;
-
-            set => _ignoreExtensions = value;
-        }
+        public bool IgnoreExtensions { get; set; }
 
         /// <summary>
         /// Gets or sets the delegate used to validate the Origin header included in
@@ -296,12 +289,7 @@ namespace WebSocketSharp.Server
         ///   The default value is <see langword="null"/>.
         ///   </para>
         /// </value>
-        public Func<string, bool> OriginValidator
-        {
-            get => _originValidator;
-
-            set => _originValidator = value;
-        }
+        public Func<string, bool> OriginValidator { get; set; }
 
         /// <summary>
         /// Gets or sets the name of the WebSocket subprotocol for the service.
@@ -327,17 +315,11 @@ namespace WebSocketSharp.Server
         /// </exception>
         public string Protocol
         {
-            get => _websocket != null
-                     ? _websocket.Protocol
-                     : (_protocol ?? string.Empty);
-
+            get => _websocket != null ? _websocket.Protocol : (_protocol ?? string.Empty);
             set
             {
                 if (ConnectionState != WebSocketState.Connecting)
-                {
-                    var msg = "The session has already started.";
-                    throw new InvalidOperationException(msg);
-                }
+                    throw new InvalidOperationException("The session has already started.");
 
                 if (value == null || value.Length == 0)
                 {
@@ -346,7 +328,7 @@ namespace WebSocketSharp.Server
                 }
 
                 if (!value.AsSpan().IsToken())
-                    throw new ArgumentException("Not a token.", "value");
+                    throw new ArgumentException("Not a token.", nameof(value));
 
                 _protocol = value;
             }
@@ -364,7 +346,7 @@ namespace WebSocketSharp.Server
         ///   <see cref="DateTime.MaxValue"/> if the session has not started yet.
         ///   </para>
         /// </value>
-        public DateTime StartTime => _startTime;
+        public DateTime StartTime { get; private set; }
 
         #endregion
 
@@ -372,17 +354,17 @@ namespace WebSocketSharp.Server
 
         private string CheckHandshakeRequest(WebSocketContext context)
         {
-            if (_originValidator != null)
+            if (OriginValidator != null)
             {
-                if (!_originValidator(context.Origin))
+                if (!OriginValidator(context.Origin))
                     return "It includes no Origin header or an invalid one.";
             }
 
-            if (_cookiesValidator != null)
+            if (CookiesValidator != null)
             {
                 var req = context.CookieCollection;
                 var res = context.WebSocket.CookieCollection;
-                if (!_cookiesValidator(req, res))
+                if (!CookiesValidator(req, res))
                     return "It includes no cookie or an invalid one.";
             }
 
@@ -391,10 +373,10 @@ namespace WebSocketSharp.Server
 
         private void OnClose(object sender, CloseEvent e)
         {
-            if (_id == null)
+            if (ID == null)
                 return;
 
-            _sessions.Remove(_id);
+            Sessions.Remove(ID);
             OnClose(e);
         }
 
@@ -410,14 +392,14 @@ namespace WebSocketSharp.Server
 
         private void OnOpen(object sender, EventArgs e)
         {
-            _id = _sessions.Add(this);
-            if (_id == null)
+            ID = Sessions.Add(this);
+            if (ID == null)
             {
                 _websocket.Close(CloseStatusCode.Away);
                 return;
             }
 
-            _startTime = DateTime.Now;
+            StartTime = DateTime.Now;
             OnOpen();
         }
 
@@ -449,13 +431,13 @@ namespace WebSocketSharp.Server
                 return;
             }
 
-            _context = context;
-            _sessions = sessions;
+            Context = context;
+            Sessions = sessions;
 
             _websocket = context.WebSocket;
             _websocket.CustomHandshakeRequestChecker = CheckHandshakeRequest;
             _websocket.EmitOnPing = _emitOnPing;
-            _websocket.IgnoreExtensions = _ignoreExtensions;
+            _websocket.IgnoreExtensions = IgnoreExtensions;
             _websocket.Protocol = _protocol;
 
             var waitTime = sessions.WaitTime;
@@ -799,13 +781,6 @@ namespace WebSocketSharp.Server
         {
         }
 
-        protected void SendAsJson(object value)
-        {
-            AssertOpen();
-            string str = JsonConvert.SerializeObject(value, Formatting.None);
-            Send(str);
-        }
-
         /// <summary>
         /// Sends the specified data to a client using the WebSocket connection.
         /// </summary>
@@ -1105,6 +1080,39 @@ namespace WebSocketSharp.Server
         {
             AssertOpen();
             _websocket.SendAsync(type, stream, length, completed);
+        }
+
+        protected JsonTextWriter GetJsonMessageWriter(out StreamWriter writer)
+        {
+            AssertOpen();
+            var tmp = RecyclableMemoryManager.Shared.GetStream();
+            writer = new StreamWriter(tmp, Ext.PlainUTF8, 1024)
+            {
+                AutoFlush = false
+            };
+            return new JsonTextWriter(writer);
+        }
+
+        protected void FinishJsonMessage(JsonTextWriter json, StreamWriter writer)
+        {
+            json.Flush();
+            var stream = writer.BaseStream;
+            stream.Position = 0;
+            Send(MessageFrameType.Text, stream, (int)stream.Length);
+        }
+
+        protected void SendJson(object value, JsonSerializer serializer)
+        {
+            using (var json = GetJsonMessageWriter(out var stream))
+            {
+                serializer.Serialize(json, value);
+                FinishJsonMessage(json, stream);
+            }
+        }
+
+        protected void SendJson(object value)
+        {
+            SendJson(value, DefaultSerializer);
         }
 
         #endregion
